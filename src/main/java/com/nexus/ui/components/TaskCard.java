@@ -2,15 +2,17 @@ package com.nexus.ui.components;
 
 import com.nexus.model.Tag;
 import com.nexus.model.Task;
+import com.nexus.model.enums.Priority;
 import com.nexus.model.enums.TaskStatus;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
 
+import static javafx.scene.layout.Priority.ALWAYS;
+
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -18,28 +20,32 @@ import java.time.format.DateTimeFormatter;
  *
  * Layout:
  * <pre>
- * ┌──────────────────────────────────────────────────────────┐
- * │  ● [Cat pill]  Task title                    [Status]    │
- * │     📅 Due date · ⏱ 90 min est.   #focus #health        │
- * └──────────────────────────────────────────────────────────┘
+ * ┌─[priority bar]────────────────────────────────────────────┐
+ * │  Title                                       [Status]     │
+ * │  📅 Due date  ⏱ 90 min  [#tag]         [Category]        │
+ * └────────────────────────────────────────────────────────────┘
  * </pre>
  */
 public class TaskCard extends ListCell<Task> {
 
     private static final DateTimeFormatter DATE_FMT =
-        DateTimeFormatter.ofPattern("MMM d, HH:mm");
+        DateTimeFormatter.ofPattern("MMM d");
 
-    private final BorderPane card     = new BorderPane();
-    private final VBox       mainArea = new VBox(4);
-    private final HBox       topRow   = new HBox(8);
-    private final HBox       metaRow  = new HBox(8);
+    // ── Card skeleton ─────────────────────────────────────────────────────────
+    private final BorderPane card      = new BorderPane();
+    private final VBox       body      = new VBox(5);
+    private final HBox       topRow    = new HBox(8);
+    private final HBox       metaRow   = new HBox(8);
 
-    private final Circle     priorityDot = new Circle(5);
-    private final Label      titleLabel  = new Label();
-    private final Label      statusBadge = new Label();
-    private final Label      dueDateLabel = new Label();
-    private final Label      estLabel    = new Label();
-    private final HBox       tagsBox     = new HBox(4);
+    // ── Top row elements ──────────────────────────────────────────────────────
+    private final Label titleLabel    = new Label();
+    private final Label statusBadge   = new Label();
+
+    // ── Meta row elements ─────────────────────────────────────────────────────
+    private final Label dueDateLabel  = new Label();
+    private final Label estLabel      = new Label();
+    private final HBox  tagsBox       = new HBox(4);
+    private final Label categoryLabel = new Label();
 
     public TaskCard() {
         super();
@@ -64,102 +70,114 @@ public class TaskCard extends ListCell<Task> {
     // ── Build ─────────────────────────────────────────────────────────────────
 
     private void buildLayout() {
-        // Top row: priority dot + title + status badge
-        topRow.setAlignment(Pos.CENTER_LEFT);
+        // Title
         titleLabel.getStyleClass().add("task-card-title");
         titleLabel.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(titleLabel, Priority.ALWAYS);
+        HBox.setHgrow(titleLabel, ALWAYS);
 
-        statusBadge.getStyleClass().addAll("task-card-status-badge");
+        // Status badge (right of title)
+        statusBadge.getStyleClass().add("task-card-status-badge");
 
-        topRow.getChildren().addAll(priorityDot, titleLabel, statusBadge);
+        topRow.setAlignment(Pos.CENTER_LEFT);
+        topRow.getChildren().addAll(titleLabel, statusBadge);
 
-        // Meta row: due date + estimated time + tags
-        metaRow.setAlignment(Pos.CENTER_LEFT);
+        // Due date + estimate + tags (left) + category pill (right)
         dueDateLabel.getStyleClass().add("task-card-meta");
         estLabel.getStyleClass().add("task-card-meta");
         tagsBox.setAlignment(Pos.CENTER_LEFT);
-        metaRow.getChildren().addAll(dueDateLabel, estLabel, tagsBox);
 
-        mainArea.setPadding(new Insets(0));
-        mainArea.getChildren().addAll(topRow, metaRow);
+        categoryLabel.getStyleClass().add("task-card-category");
 
-        card.setCenter(mainArea);
+        Region metaSpacer = new Region();
+        HBox.setHgrow(metaSpacer, ALWAYS);
+
+        metaRow.setAlignment(Pos.CENTER_LEFT);
+        metaRow.getChildren().addAll(dueDateLabel, estLabel, tagsBox, metaSpacer, categoryLabel);
+
+        body.setPadding(new Insets(10, 14, 10, 14));
+        body.getChildren().addAll(topRow, metaRow);
+
+        card.setCenter(body);
         card.getStyleClass().add("task-card");
-        card.setPadding(new Insets(10, 14, 10, 14));
     }
 
     // ── Populate ──────────────────────────────────────────────────────────────
 
     private void populate(Task task) {
-        // Priority dot colour
-        priorityDot.setFill(Color.web(task.getPriority().getColor()));
+        applyPriorityBorder(task.getPriority());
 
-        // Title — CSS strikethrough when done (Label has no setStrikethrough; use style)
+        // Title
         titleLabel.setText(task.getTitle());
-        if (task.getStatus() == TaskStatus.DONE) {
-            titleLabel.setStyle("-fx-strikethrough: true;");
-        } else {
-            titleLabel.setStyle("-fx-strikethrough: false;");
-        }
+        titleLabel.setStyle(task.getStatus() == TaskStatus.DONE
+            ? "-fx-strikethrough: true; -fx-text-fill: #4a5770;"
+            : "-fx-strikethrough: false;");
 
         // Status badge
         statusBadge.setText(task.getStatus().getDisplayName());
         statusBadge.getStyleClass().removeIf(s -> s.startsWith("status-"));
         statusBadge.getStyleClass().add("status-" + task.getStatus().name().toLowerCase());
 
-        // Category colour strip (left border via CSS class)
-        card.getStyleClass().removeIf(s -> s.startsWith("cat-"));
-        if (task.getCategory() != null) {
-            String safeColor = task.getCategory().getColor().replace("#", "");
-            card.getStyleClass().add("cat-strip");
-            // Pass the actual color through a -fx-border inline style
-            card.setStyle("-fx-border-color: " + task.getCategory().getColor()
-                + " transparent transparent transparent; -fx-border-width: 0 0 0 3;");
-        } else {
-            card.setStyle("");
-        }
-
         // Due date
-        if (task.getDueDate() != null) {
-            String dateText = "📅 " + task.getDueDate().format(DATE_FMT);
-            dueDateLabel.setText(dateText);
-            dueDateLabel.setVisible(true);
-            dueDateLabel.setManaged(true);
-            if (task.isOverdue()) {
-                dueDateLabel.getStyleClass().add("overdue");
-            } else {
-                dueDateLabel.getStyleClass().remove("overdue");
-            }
-        } else {
-            dueDateLabel.setVisible(false);
-            dueDateLabel.setManaged(false);
+        boolean hasDate = task.getDueDate() != null;
+        dueDateLabel.setVisible(hasDate);
+        dueDateLabel.setManaged(hasDate);
+        if (hasDate) {
+            dueDateLabel.setText("📅 " + formatDue(task));
+            dueDateLabel.getStyleClass().removeIf("overdue"::equals);
+            if (task.isOverdue()) dueDateLabel.getStyleClass().add("overdue");
         }
 
-        // Estimated time
-        if (task.getEstimatedMinutes() != null && task.getEstimatedMinutes() > 0) {
-            estLabel.setText("⏱ " + task.getEstimatedMinutes() + " min");
-            estLabel.setVisible(true);
-            estLabel.setManaged(true);
-        } else {
-            estLabel.setVisible(false);
-            estLabel.setManaged(false);
-        }
+        // Estimate
+        boolean hasEst = task.getEstimatedMinutes() != null && task.getEstimatedMinutes() > 0;
+        estLabel.setVisible(hasEst);
+        estLabel.setManaged(hasEst);
+        if (hasEst) estLabel.setText("⏱ " + task.getEstimatedMinutes() + "m");
 
         // Tags
         tagsBox.getChildren().clear();
         for (Tag tag : task.getTags()) {
             Label chip = new Label("#" + tag.getName());
             chip.getStyleClass().add("tag-chip");
-            chip.setStyle("-fx-background-color: " + tag.getColor() + "33;");  // 20% opacity
+            chip.setStyle("-fx-background-color: " + tag.getColor() + "22;");
             tagsBox.getChildren().add(chip);
         }
 
-        // Dim done/archived tasks
-        if (task.getStatus() == TaskStatus.DONE || task.isArchived()) {
-            card.setOpacity(0.6);
-        } else {
-            card.setOpacity(1.0);
+        // Category
+        boolean hasCat = task.getCategory() != null;
+        categoryLabel.setVisible(hasCat);
+        categoryLabel.setManaged(hasCat);
+        if (hasCat) {
+            categoryLabel.setText(task.getCategory().getName());
+            categoryLabel.setStyle(
+                "-fx-background-color: " + task.getCategory().getColor() + "20;" +
+                "-fx-border-color: " + task.getCategory().getColor() + "50;" +
+                "-fx-border-width: 1; -fx-border-radius: 4; -fx-background-radius: 4;" +
+                "-fx-text-fill: " + task.getCategory().getColor() + ";"
+            );
         }
+
+        // Dim done / archived tasks
+        double opacity = (task.getStatus() == TaskStatus.DONE || task.isArchived()) ? 0.55 : 1.0;
+        card.setOpacity(opacity);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void applyPriorityBorder(Priority priority) {
+        String color = priority.getColor();
+        // 4-px left accent bar; thin borders on other three sides
+        card.setStyle(
+            "-fx-border-color: rgba(255,255,255,0.07) rgba(255,255,255,0.07) " +
+            "rgba(255,255,255,0.07) " + color + ";"
+        );
+    }
+
+    private String formatDue(Task task) {
+        LocalDate d = task.getDueDate().toLocalDate();
+        LocalDate today = LocalDate.now();
+        if (d.equals(today))           return "Today";
+        if (d.equals(today.plusDays(1))) return "Tomorrow";
+        if (d.equals(today.minusDays(1))) return "Yesterday";
+        return d.format(DATE_FMT);
     }
 }

@@ -2,10 +2,10 @@ package com.nexus.model.enums;
 
 /** Task priority level, ordered from lowest to highest urgency. */
 public enum Priority {
-    LOW("Low",      "#22C55E"),   // green
-    MEDIUM("Medium","#EAB308"),   // yellow
-    HIGH("High",    "#F97316"),   // orange
-    CRITICAL("Critical", "#EF4444"); // red
+    LOW("Low",      "#2dba82"),   // teal-green
+    MEDIUM("Medium","#6373f4"),   // indigo
+    HIGH("High",    "#e8a020"),   // amber
+    CRITICAL("Critical", "#f05a5a"); // coral-red
 
     private final String displayName;
     private final String color;

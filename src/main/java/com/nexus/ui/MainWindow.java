@@ -10,12 +10,14 @@ import com.nexus.ui.components.NotificationBell;
 import com.nexus.ui.components.Sidebar;
 import com.nexus.ui.views.*;
 import com.nexus.viewmodel.*;
+import javafx.animation.FadeTransition;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.*;
+import javafx.util.Duration;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 import org.slf4j.Logger;
@@ -231,7 +233,25 @@ public class MainWindow extends BorderPane {
     }
 
     private void showView(javafx.scene.Node view) {
-        setCenter(view);
+        javafx.scene.Node current = getCenter();
+        if (current == view) return;
+
+        if (current != null) {
+            FadeTransition fadeOut = new FadeTransition(Duration.millis(100), current);
+            fadeOut.setFromValue(current.getOpacity());
+            fadeOut.setToValue(0.0);
+            fadeOut.setOnFinished(e -> {
+                setCenter(view);
+                view.setOpacity(0.0);
+                FadeTransition fadeIn = new FadeTransition(Duration.millis(160), view);
+                fadeIn.setFromValue(0.0);
+                fadeIn.setToValue(1.0);
+                fadeIn.play();
+            });
+            fadeOut.play();
+        } else {
+            setCenter(view);
+        }
     }
 
     // ── Detail panel ──────────────────────────────────────────────────────────
