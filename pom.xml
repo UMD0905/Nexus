@@ -318,4 +318,117 @@
     </plugins>
   </build>
 
+  <!-- ══════════════════════════════════════════════════════════════
+       Native packaging profile  (mvn package -Ppackage -DskipTests)
+       Assembles a dist-input/ folder, then you run jpackage once.
+       ══════════════════════════════════════════════════════════════ -->
+  <profiles>
+    <profile>
+      <id>package</id>
+
+      <!--
+        Windows-native JavaFX classifiers bring the .dll files that
+        the JavaFX runtime needs on Windows.  They go on the MODULE-PATH
+        so jpackage configures the launcher correctly.
+      -->
+      <dependencies>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-controls</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-fxml</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-swing</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-graphics</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-base</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-media</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+      </dependencies>
+
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-dependency-plugin</artifactId>
+            <version>3.7.1</version>
+            <executions>
+
+              <!-- 1. Non-JavaFX runtime deps → dist-input/ (classpath) -->
+              <execution>
+                <id>copy-runtime-deps</id>
+                <phase>package</phase>
+                <goals><goal>copy-dependencies</goal></goals>
+                <configuration>
+                  <outputDirectory>${project.build.directory}/dist-input</outputDirectory>
+                  <includeScope>runtime</includeScope>
+                  <excludeGroupIds>org.openjfx</excludeGroupIds>
+                </configuration>
+              </execution>
+
+              <!-- 2. JavaFX win-classifier JARs → dist-input/ (module-path at runtime)
+                   Only the win-classifier JARs are real named modules with native DLLs.
+                   The no-classifier stubs have no module-info and must be excluded. -->
+              <execution>
+                <id>copy-javafx-mods</id>
+                <phase>package</phase>
+                <goals><goal>copy-dependencies</goal></goals>
+                <configuration>
+                  <outputDirectory>${project.build.directory}/dist-input</outputDirectory>
+                  <includeScope>runtime</includeScope>
+                  <includeGroupIds>org.openjfx</includeGroupIds>
+                  <includeClassifiers>win</includeClassifiers>
+                </configuration>
+              </execution>
+
+              <!-- 3. App JAR → dist-input/ -->
+              <execution>
+                <id>copy-app-jar</id>
+                <phase>package</phase>
+                <goals><goal>copy</goal></goals>
+                <configuration>
+                  <outputDirectory>${project.build.directory}/dist-input</outputDirectory>
+                  <artifactItems>
+                    <artifactItem>
+                      <groupId>${project.groupId}</groupId>
+                      <artifactId>${project.artifactId}</artifactId>
+                      <version>${project.version}</version>
+                      <type>jar</type>
+                      <destFileName>nexus-app.jar</destFileName>
+                    </artifactItem>
+                  </artifactItems>
+                </configuration>
+              </execution>
+
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>
