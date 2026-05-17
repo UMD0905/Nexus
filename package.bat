@@ -22,8 +22,9 @@ if exist "%PROJECT_DIR%dist\Nexus" rmdir /s /q "%PROJECT_DIR%dist\Nexus"
   --main-jar nexus-app.jar ^
   --main-class com.nexus.Main ^
   --name Nexus ^
+  --icon "%PROJECT_DIR%src\main\resources\nexus.ico" ^
   --dest "%PROJECT_DIR%dist" ^
-  --java-options "--module-path $APPDIR" ^
+  --java-options "--module-path=$APPDIR\mods" ^
   --java-options "--add-modules=javafx.controls,javafx.fxml,javafx.swing,javafx.base,javafx.graphics,javafx.media" ^
   --java-options "--add-opens=java.base/java.lang=ALL-UNNAMED" ^
   --java-options "--add-opens=java.base/java.util=ALL-UNNAMED" ^
@@ -34,7 +35,10 @@ if exist "%PROJECT_DIR%dist\Nexus" rmdir /s /q "%PROJECT_DIR%dist\Nexus"
 
 if errorlevel 1 ( echo jpackage FAILED & pause & exit /b 1 )
 
-REM Remove no-classifier JavaFX stub JARs (win-classifier ones are the real named modules)
+REM Move win-classifier JavaFX JARs to mods/ so they're isolated on the module-path.
+REM Remove the no-classifier stub JARs (they have no module-info and would conflict).
+mkdir "%PROJECT_DIR%dist\Nexus\app\mods" 2>nul
+move /y "%PROJECT_DIR%dist\Nexus\app\javafx-*-win.jar" "%PROJECT_DIR%dist\Nexus\app\mods\" >nul 2>&1
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-base-21.0.5.jar" 2>nul
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-controls-21.0.5.jar" 2>nul
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-fxml-21.0.5.jar" 2>nul
