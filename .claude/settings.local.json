@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn generate-sources *)",
+      "Read(//d/JetBrains//**)",
+      "Bash(find /c /d -maxdepth 5 -name \"java.exe\")",
+      "Bash(taskkill //F //IM java.exe)"
+    ]
+  }
+}

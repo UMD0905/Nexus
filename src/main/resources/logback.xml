@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <!-- Console appender: clean, coloured output during development -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{36}) – %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Rolling file appender: kept for diagnostics without bloating disk -->
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${user.home}/.nexus/logs/nexus.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>${user.home}/.nexus/logs/nexus-%d{yyyy-MM-dd}.log</fileNamePattern>
+      <maxHistory>7</maxHistory>           <!-- keep one week of logs -->
+      <totalSizeCap>50MB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} – %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Suppress JOOQ SQL logging (set to DEBUG to see every query) -->
+  <logger name="org.jooq"                  level="WARN"/>
+  <!-- Suppress HikariCP pool noise -->
+  <logger name="com.zaxxer.hikari"         level="WARN"/>
+  <!-- Suppress Flyway migration detail -->
+  <logger name="org.flywaydb"              level="INFO"/>
+
+  <!-- Application code: INFO in prod, DEBUG during development -->
+  <logger name="com.nexus"                 level="DEBUG"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="FILE"/>
+  </root>
+
+</configuration>

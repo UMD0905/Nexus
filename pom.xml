@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.nexus</groupId>
+  <artifactId>nexus</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+  <name>Nexus – Personal Productivity Hub</name>
+
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- JavaFX -->
+    <javafx.version>21.0.5</javafx.version>
+
+    <!-- UI -->
+    <atlantafx.version>2.0.1</atlantafx.version>
+    <ikonli.version>12.3.1</ikonli.version>
+    <controlsfx.version>11.2.1</controlsfx.version>
+
+    <!-- Database -->
+    <h2.version>2.2.224</h2.version>
+    <jooq.version>3.19.10</jooq.version>
+    <flyway.version>10.15.0</flyway.version>
+    <hikari.version>5.1.0</hikari.version>
+
+    <!-- Utility -->
+    <lombok.version>1.18.34</lombok.version>
+    <jackson.version>2.17.2</jackson.version>
+
+    <!-- Logging -->
+    <slf4j.version>2.0.13</slf4j.version>
+    <logback.version>1.5.6</logback.version>
+
+    <!-- Charts -->
+    <jfreechart.version>1.5.4</jfreechart.version>
+
+    <!-- Testing -->
+    <junit.version>5.10.3</junit.version>
+    <mockito.version>5.12.0</mockito.version>
+    <testfx.version>4.0.18</testfx.version>
+
+    <!--
+      Build-time JOOQ codegen H2 path.
+      Written to target/ so 'mvn clean' wipes it on schema changes.
+    -->
+    <jooq.codegen.db.url>jdbc:h2:file:${project.build.directory}/jooq-gen/nexusdb</jooq.codegen.db.url>
+  </properties>
+
+  <dependencies>
+
+    <!-- ═══════════════════════ JavaFX ═══════════════════════ -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-fxml</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+    <!-- Required for JFreeChart → JavaFX bridge via SwingFXUtils -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-swing</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ UI Toolkit ═══════════════════════ -->
+    <dependency>
+      <groupId>io.github.mkpaz</groupId>
+      <artifactId>atlantafx-base</artifactId>
+      <version>${atlantafx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.kordamp.ikonli</groupId>
+      <artifactId>ikonli-javafx</artifactId>
+      <version>${ikonli.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.kordamp.ikonli</groupId>
+      <artifactId>ikonli-materialdesign2-pack</artifactId>
+      <version>${ikonli.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.controlsfx</groupId>
+      <artifactId>controlsfx</artifactId>
+      <version>${controlsfx.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Database ═══════════════════════ -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>${h2.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jooq</groupId>
+      <artifactId>jooq</artifactId>
+      <version>${jooq.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <version>${flyway.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.zaxxer</groupId>
+      <artifactId>HikariCP</artifactId>
+      <version>${hikari.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Utility ═══════════════════════ -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <version>${lombok.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Logging ═══════════════════════ -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Charts ═══════════════════════ -->
+    <dependency>
+      <groupId>org.jfree</groupId>
+      <artifactId>jfreechart</artifactId>
+      <version>${jfreechart.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Testing ═══════════════════════ -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <version>${mockito.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testfx</groupId>
+      <artifactId>testfx-junit5</artifactId>
+      <version>${testfx.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+
+      <!-- ── 1. Compiler ── -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <release>21</release>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+              <version>${lombok.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+
+      <!--
+        ── 2. Flyway (generate-sources, runs FIRST) ────────────────────
+        Creates a throw-away H2 schema in target/jooq-gen/ so JOOQ can
+        introspect it.  The production DB is migrated at runtime instead.
+      -->
+      <plugin>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-maven-plugin</artifactId>
+        <version>${flyway.version}</version>
+        <executions>
+          <execution>
+            <id>flyway-for-jooq-codegen</id>
+            <phase>generate-sources</phase>
+            <goals><goal>migrate</goal></goals>
+            <configuration>
+              <url>${jooq.codegen.db.url}</url>
+              <user>sa</user>
+              <password></password>
+              <locations>
+                <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
+              </locations>
+            </configuration>
+          </execution>
+        </executions>
+        <dependencies>
+          <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>${h2.version}</version>
+          </dependency>
+        </dependencies>
+      </plugin>
+
+      <!--
+        ── 3. JOOQ Codegen (generate-sources, runs AFTER Flyway) ───────
+        Reads the schema and emits type-safe Java into
+        target/generated-sources/jooq (auto-added to compile classpath).
+
+        First time in IntelliJ:
+          1. Run: mvn generate-sources
+          2. Right-click target/generated-sources/jooq → Mark as Sources Root
+      -->
+      <plugin>
+        <groupId>org.jooq</groupId>
+        <artifactId>jooq-codegen-maven</artifactId>
+        <version>${jooq.version}</version>
+        <executions>
+          <execution>
+            <id>jooq-codegen</id>
+            <phase>generate-sources</phase>
+            <goals><goal>generate</goal></goals>
+          </execution>
+        </executions>
+        <configuration>
+          <jdbc>
+            <driver>org.h2.Driver</driver>
+            <url>${jooq.codegen.db.url}</url>
+            <user>sa</user>
+            <password></password>
+          </jdbc>
+          <generator>
+            <database>
+              <name>org.jooq.meta.h2.H2Database</name>
+              <inputSchema>PUBLIC</inputSchema>
+              <includes>.*</includes>
+              <excludes>flyway_schema_history</excludes>
+            </database>
+            <generate>
+              <pojos>true</pojos>
+              <pojosEqualsAndHashCode>true</pojosEqualsAndHashCode>
+              <pojosToString>true</pojosToString>
+              <fluentSetters>true</fluentSetters>
+              <records>true</records>
+              <daos>false</daos>
+            </generate>
+            <target>
+              <packageName>com.nexus.db</packageName>
+              <directory>${project.build.directory}/generated-sources/jooq</directory>
+            </target>
+          </generator>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>${h2.version}</version>
+          </dependency>
+        </dependencies>
+      </plugin>
+
+      <!-- ── 4. JavaFX run ── -->
+      <plugin>
+        <groupId>org.openjfx</groupId>
+        <artifactId>javafx-maven-plugin</artifactId>
+        <version>0.0.8</version>
+        <configuration>
+          <mainClass>com.nexus.Main</mainClass>
+          <options>
+            <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.util=ALL-UNNAMED</option>
+            <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
+            <option>--add-exports=javafx.base/com.sun.javafx.event=ALL-UNNAMED</option>
+            <option>--add-opens=javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED</option>
+            <option>--add-opens=javafx.controls/com.sun.javafx.scene.control.behavior=ALL-UNNAMED</option>
+          </options>
+        </configuration>
+      </plugin>
+
+      <!-- ── 5. Surefire (JUnit 5) ── -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.3.1</version>
+        <configuration>
+          <argLine>--add-opens=java.base/java.lang=ALL-UNNAMED</argLine>
+        </configuration>
+      </plugin>
+
+    </plugins>
+  </build>
+
+</project>

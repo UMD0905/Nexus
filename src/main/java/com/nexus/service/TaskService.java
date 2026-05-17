@@ -1,0 +1,260 @@
+package com.nexus.service;
+
+import com.nexus.model.*;
+import com.nexus.model.enums.TaskStatus;
+import com.nexus.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+/**
+ * Core business logic for {@link Task}.
+ *
+ * <p>This class owns the task lifecycle rules:
+ * <ul>
+ *   <li>Validation on create/update</li>
+ *   <li>Stamping {@code completedAt} when a task is marked done</li>
+ *   <li>Stamping {@code archivedAt} when a task is archived</li>
+ *   <li>Enriching tasks with their category, tags, and subtasks</li>
+ * </ul>
+ *
+ * <p>Service methods are all synchronous — JavaFX callers should run them
+ * on a background thread if the result set is large (> ~1000 tasks).
+ */
+public class TaskService {
+
+    private static final Logger log = LoggerFactory.getLogger(TaskService.class);
+
+    private final TaskRepository         taskRepository;
+    private final CategoryRepository     categoryRepository;
+    private final TagRepository          tagRepository;
+    private final SubtaskRepository      subtaskRepository;
+    private final StreakService          streakService;
+
+    public TaskService(TaskRepository taskRepository,
+                       CategoryRepository categoryRepository,
+                       TagRepository tagRepository,
+                       SubtaskRepository subtaskRepository,
+                       StreakService streakService) {
+        this.taskRepository      = taskRepository;
+        this.categoryRepository  = categoryRepository;
+        this.tagRepository       = tagRepository;
+        this.subtaskRepository   = subtaskRepository;
+        this.streakService       = streakService;
+    }
+
+    // ── Queries ───────────────────────────────────────────────────────────────
+
+    /**
+     * Returns tasks matching the filter, enriched with category and tags.
+     * This is the primary method called by the task list ViewModel.
+     */
+    public List<Task> getTasks(TaskFilter filter) {
+        List<Task> tasks = taskRepository.findAll(filter);
+        enrich(tasks);
+        return tasks;
+    }
+
+    /** Returns the single task with all enrichment (category, tags, subtasks). */
+    public Optional<Task> getTaskById(long id) {
+        return taskRepository.findById(id).map(task -> {
+            enrichOne(task);
+            task.setSubtasks(subtaskRepository.findByTaskId(id));
+            return task;
+        });
+    }
+
+    public List<Task> getTasksDueToday() {
+        List<Task> tasks = taskRepository.findDueToday();
+        enrich(tasks);
+        return tasks;
+    }
+
+    public List<Task> getTasksDueThisWeek() {
+        List<Task> tasks = taskRepository.findDueThisWeek();
+        enrich(tasks);
+        return tasks;
+    }
+
+    /** Returns tasks for the ISO week starting at the given Monday. */
+    public List<Task> getTasksDueThisWeek(java.time.LocalDate monday) {
+        List<Task> tasks = taskRepository.findDueInWeek(monday, monday.plusDays(6));
+        enrich(tasks);
+        return tasks;
+    }
+
+    // ── Mutations ─────────────────────────────────────────────────────────────
+
+    /**
+     * Persists a new task.  Validates, sets defaults, and returns the saved task
+     * with its auto-generated id.
+     */
+    public Task createTask(Task task) {
+        validate(task);
+        task.setActualMinutes(0);
+        task.setArchived(false);
+        task.setCreatedAt(LocalDateTime.now());
+        task.setUpdatedAt(LocalDateTime.now());
+        Task saved = taskRepository.save(task);
+        log.info("Created task '{}' (id={})", saved.getTitle(), saved.getId());
+        return saved;
+    }
+
+    public Task updateTask(Task task) {
+        if (task.getId() == null) {
+            throw new IllegalArgumentException("Cannot update task without an id");
+        }
+        validate(task);
+        task.setUpdatedAt(LocalDateTime.now());
+        return taskRepository.update(task);
+    }
+
+    /**
+     * Marks a task as done and stamps {@code completedAt}.
+     * Does nothing if the task is already done.
+     */
+    public Task markDone(long taskId) {
+        Task task = requireTask(taskId);
+        if (task.getStatus() == TaskStatus.DONE) {
+            return task;  // idempotent
+        }
+        task.setStatus(TaskStatus.DONE);
+        task.setCompletedAt(LocalDateTime.now());
+        task.setUpdatedAt(LocalDateTime.now());
+        Task updated = taskRepository.update(task);
+        log.info("Marked task '{}' (id={}) as DONE at {}", task.getTitle(), taskId, task.getCompletedAt());
+        // Update streak if this is a recurring task
+        streakService.recordCompletion(updated);
+        return updated;
+    }
+
+    /**
+     * Moves a task to In Progress.
+     */
+    public Task markInProgress(long taskId) {
+        Task task = requireTask(taskId);
+        task.setStatus(TaskStatus.IN_PROGRESS);
+        task.setUpdatedAt(LocalDateTime.now());
+        return taskRepository.update(task);
+    }
+
+    /**
+     * Archives a task.  If it is not already done, marks it done first.
+     * Sets {@code isArchived = true} and stamps {@code archivedAt}.
+     */
+    public Task archiveTask(long taskId) {
+        Task task = requireTask(taskId);
+        if (task.getStatus() != TaskStatus.DONE && task.getStatus() != TaskStatus.CANCELLED) {
+            task.setStatus(TaskStatus.DONE);
+            task.setCompletedAt(LocalDateTime.now());
+        }
+        task.setArchived(true);
+        task.setArchivedAt(LocalDateTime.now());
+        task.setUpdatedAt(LocalDateTime.now());
+        Task updated = taskRepository.update(task);
+        log.info("Archived task '{}' (id={})", task.getTitle(), taskId);
+        return updated;
+    }
+
+    /**
+     * Restores an archived task back to active.
+     * Resets {@code isArchived} and clears {@code archivedAt}.
+     * Status is reset to TODO so the task re-enters the workflow.
+     */
+    public Task restoreTask(long taskId) {
+        Task task = requireTask(taskId);
+        task.setArchived(false);
+        task.setArchivedAt(null);
+        task.setStatus(TaskStatus.TODO);
+        task.setCompletedAt(null);
+        task.setUpdatedAt(LocalDateTime.now());
+        Task updated = taskRepository.update(task);
+        log.info("Restored task '{}' (id={}) from archive", task.getTitle(), taskId);
+        return updated;
+    }
+
+    /**
+     * Bulk-archives all tasks with status DONE that are not yet archived.
+     * Useful for the "archive all completed" button in the toolbar.
+     */
+    public int archiveAllCompleted() {
+        List<Task> allActive = taskRepository.findAll(TaskFilter.allActive());
+        List<Task> toArchive = allActive.stream()
+            .filter(t -> t.getStatus() == TaskStatus.DONE)
+            .toList();
+        for (Task t : toArchive) {
+            t.setArchived(true);
+            t.setArchivedAt(LocalDateTime.now());
+            t.setUpdatedAt(LocalDateTime.now());
+            taskRepository.update(t);
+        }
+        log.info("Bulk-archived {} completed task(s)", toArchive.size());
+        return toArchive.size();
+    }
+
+    public void deleteTask(long taskId) {
+        taskRepository.delete(taskId);
+        log.info("Deleted task id={}", taskId);
+    }
+
+    // ── Tag management ────────────────────────────────────────────────────────
+
+    public void addTagToTask(long taskId, long tagId) {
+        tagRepository.addTagToTask(taskId, tagId);
+    }
+
+    public void removeTagFromTask(long taskId, long tagId) {
+        tagRepository.removeTagFromTask(taskId, tagId);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private Task requireTask(long taskId) {
+        return taskRepository.findById(taskId)
+            .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+    }
+
+    private void validate(Task task) {
+        if (task.getTitle() == null || task.getTitle().isBlank()) {
+            throw new IllegalArgumentException("Task title must not be blank");
+        }
+        if (task.getPriority() == null) {
+            throw new IllegalArgumentException("Task priority must not be null");
+        }
+        if (task.getStatus() == null) {
+            throw new IllegalArgumentException("Task status must not be null");
+        }
+    }
+
+    /**
+     * Bulk-enriches a list with category and tag data using the minimum number
+     * of queries (one per data type, not one per task).
+     */
+    private void enrich(List<Task> tasks) {
+        if (tasks.isEmpty()) return;
+
+        // Load all categories once and index by id
+        Map<Long, Category> categoryById = categoryRepository.findAll()
+            .stream().collect(Collectors.toMap(Category::getId, c -> c));
+
+        // Load tags for each task individually (kept simple for Phase 1)
+        for (Task t : tasks) {
+            if (t.getCategoryId() != null) {
+                t.setCategory(categoryById.get(t.getCategoryId()));
+            }
+            t.setTags(tagRepository.findByTaskId(t.getId()));
+        }
+    }
+
+    private void enrichOne(Task task) {
+        if (task.getCategoryId() != null) {
+            categoryRepository.findById(task.getCategoryId()).ifPresent(task::setCategory);
+        }
+        task.setTags(tagRepository.findByTaskId(task.getId()));
+    }
+}
