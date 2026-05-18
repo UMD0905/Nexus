@@ -1,300 +1,157 @@
 package com.nexus.ui;
 
-import atlantafx.base.theme.PrimerDark;
-import atlantafx.base.theme.PrimerLight;
-import atlantafx.base.theme.Styles;
 import com.nexus.config.AppContext;
-import com.nexus.model.Category;
-import com.nexus.ui.components.CategoryDialog;
-import com.nexus.ui.components.NotificationBell;
-import com.nexus.ui.components.Sidebar;
-import com.nexus.ui.views.*;
-import com.nexus.viewmodel.*;
-import javafx.animation.FadeTransition;
-import javafx.application.Application;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.control.Label;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.layout.*;
-import javafx.util.Duration;
-import org.kordamp.ikonli.javafx.FontIcon;
-import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
+import javafx.concurrent.Worker;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.TextInputDialog;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
+import javafx.scene.web.WebEngine;
+import javafx.scene.web.WebView;
+import netscape.javascript.JSObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import java.io.InputStream;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 /**
- * Root window of the Nexus application.
+ * Root window — hosts the React/TypeScript UI in a JavaFX WebView.
  *
- * <p>Layout:
- * <pre>
- * ┌─────────────────────────────────────────────────────────────────┐
- * │  Nexus                               [🔔 bell]  [🌙/☀ theme]  │
- * ├──────────┬──────────────────────────────────────────────────────┤
- * │ Sidebar  │  Active view (TaskList / Today / Week / Matrix /      │
- * │          │               Pomodoro)          [DetailPanel]        │
- * └──────────┴──────────────────────────────────────────────────────┘
- * </pre>
+ * <p>When packaged as an app-image the webui resources live inside the JAR.
+ * JavaFX WebKit cannot load subresources (JS/CSS) from {@code jar:} URLs, so
+ * we extract the entire {@code /webui/} tree to a temp directory on first run
+ * and load from there via a plain {@code file://} URL instead.
  */
-public class MainWindow extends BorderPane {
+public class MainWindow extends StackPane {
 
     private static final Logger log = LoggerFactory.getLogger(MainWindow.class);
 
-    private final AppContext appContext;
-    private boolean          isDarkTheme = true;
+    private final AppContext  ctx;
+    private final NexusBridge bridge;
 
-    // ── View models ───────────────────────────────────────────────────────────
-    private TaskListViewModel   listVm;
-    private TaskDetailViewModel detailVm;
-    private TodayViewModel      todayVm;
-    private WeekViewModel       weekVm;
-    private EisenhowerViewModel eisenhowerVm;
-    private PomodoroViewModel   pomodoroVm;
-    private GoalsViewModel      goalsVm;
-    private DashboardViewModel  dashboardVm;
-
-    // ── Views ─────────────────────────────────────────────────────────────────
-    private TaskListView    taskListView;
-    private TaskDetailPanel detailPanel;
-    private TodayView       todayView;
-    private WeekView        weekView;
-    private EisenhowerView  eisenhowerView;
-    private PomodoroView    pomodoroView;
-    private GoalsView       goalsView;
-    private DashboardView   dashboardView;
-
-    // ── Components ────────────────────────────────────────────────────────────
-    private Sidebar          sidebar;
-    private NotificationBell notificationBell;
-
-    public MainWindow(AppContext appContext) {
-        this.appContext = appContext;
+    public MainWindow(AppContext ctx, NexusBridge bridge) {
+        this.ctx    = ctx;
+        this.bridge = bridge;
         build();
     }
 
-    // ── Build ─────────────────────────────────────────────────────────────────
-
     private void build() {
-        // ViewModels
-        listVm       = new TaskListViewModel(appContext.getTaskService(),
-                                             appContext.getCategoryService());
-        detailVm     = new TaskDetailViewModel(appContext.getTaskService(),
-                                               appContext.getCategoryService());
-        todayVm      = new TodayViewModel(appContext.getTaskService(),
-                                           appContext.getTimeBlockService());
-        weekVm       = new WeekViewModel(appContext.getTaskService());
-        eisenhowerVm = new EisenhowerViewModel(appContext.getTaskService());
-        pomodoroVm   = new PomodoroViewModel(appContext.getPomodoroService(),
-                                              appContext.getTaskService());
-        goalsVm      = new GoalsViewModel(appContext.getGoalService(),
-                                          appContext.getCategoryService());
-        dashboardVm  = new DashboardViewModel(appContext.getTaskService(),
-                                              appContext.getPomodoroService(),
-                                              appContext.getStreakService());
+        setBackground(new Background(new BackgroundFill(Color.web("#090d18"), null, null)));
 
-        // Wire notification bell refresh to reminder service
-        appContext.getReminderService().setOnNotificationCreated(
-            () -> { if (notificationBell != null) notificationBell.refresh(); }
-        );
+        WebView webView = new WebView();
+        WebEngine engine = webView.getEngine();
 
-        // Build views
-        detailPanel = new TaskDetailPanel(detailVm);
-        detailPanel.setVisible(false);
-        detailPanel.setManaged(false);
-        detailPanel.setOnClose(this::hideDetail);
+        webView.setStyle("-fx-background-color: #090d18;");
+        webView.setPageFill(Color.web("#090d18"));
+        engine.setJavaScriptEnabled(true);
 
-        taskListView   = new TaskListView(listVm, detailVm, this::showDetail, this::hideDetail);
-        todayView      = new TodayView(todayVm);
-        weekView       = new WeekView(weekVm);
-        eisenhowerView = new EisenhowerView(eisenhowerVm);
-        pomodoroView   = new PomodoroView(pomodoroVm);
-        goalsView      = new GoalsView(goalsVm);
-        dashboardView  = new DashboardView(dashboardVm, appContext.getExportService());
+        // JavaFX WebView does not implement confirm/prompt natively — wire them up.
+        engine.setConfirmHandler(message -> {
+            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+            alert.setTitle("Confirm");
+            alert.setHeaderText(null);
+            alert.setContentText(message);
+            return alert.showAndWait().filter(b -> b == ButtonType.OK).isPresent();
+        });
 
-        detailVm.setOnSaved(listVm::loadTasks);
+        engine.setPromptHandler(promptData -> {
+            TextInputDialog dialog = new TextInputDialog(
+                promptData.getDefaultValue() != null ? promptData.getDefaultValue() : "");
+            dialog.setTitle("Input");
+            dialog.setHeaderText(null);
+            dialog.setContentText(promptData.getMessage());
+            return dialog.showAndWait().orElse(null);
+        });
 
-        // Sidebar
-        sidebar = new Sidebar(this::onNavigate, this::onAddCategory);
-        refreshSidebar();
+        engine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
+            if (newState == Worker.State.SUCCEEDED) {
+                JSObject window = (JSObject) engine.executeScript("window");
+                window.setMember("nexusBridge", bridge);
+                bridge.init(window);
 
-        // Top bar
-        HBox topBar = buildTopBar();
+                ctx.getReminderService().setOnNotificationCreated(() ->
+                    bridge.pushEvent("NOTIFICATION", null));
 
-        setTop(topBar);
-        setLeft(sidebar);
-        setCenter(taskListView);
-        setRight(detailPanel);
-
-        getStyleClass().add("main-window");
-        loadStylesheets();
-    }
-
-    private HBox buildTopBar() {
-        Label appLabel = new Label("Nexus");
-        appLabel.getStyleClass().add("app-title");
-        HBox.setHgrow(appLabel, Priority.ALWAYS);
-
-        notificationBell = new NotificationBell(appContext.getNotificationService());
-        notificationBell.refresh();
-
-        ToggleButton themeBtn = new ToggleButton();
-        themeBtn.setGraphic(new FontIcon(MaterialDesignW.WEATHER_NIGHT));
-        themeBtn.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT);
-        themeBtn.setSelected(true);
-        themeBtn.setOnAction(e -> toggleTheme(themeBtn));
-
-        HBox topBar = new HBox(8, appLabel, notificationBell, themeBtn);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.getStyleClass().add("top-bar");
-        topBar.setPadding(new Insets(8, 16, 8, 16));
-        return topBar;
-    }
-
-    // ── Category management ───────────────────────────────────────────────────
-
-    private void onAddCategory() {
-        new CategoryDialog().showAndWait().ifPresent(newCategory -> {
-            try {
-                List<Category> existing = appContext.getCategoryService().getAllCategories();
-                int nextPos = existing.stream()
-                    .mapToInt(Category::getPosition)
-                    .max()
-                    .orElse(0) + 1;
-                newCategory.setPosition(nextPos);
-
-                appContext.getCategoryService().createCategory(newCategory);
-                log.info("Created new life area: {}", newCategory.getName());
-                afterCategoryChange();
-            } catch (Exception ex) {
-                log.error("Failed to create category", ex);
-                showErrorAlert("Could not create life area", ex.getMessage());
+                log.info("React app loaded — bridge injected");
             }
         });
-    }
 
-    private void afterCategoryChange() {
-        refreshSidebar();
-        listVm.reloadCategories();
-        detailVm.reloadCategories();
-    }
-
-    private void refreshSidebar() {
-        List<Category> categories = appContext.getCategoryService().getAllCategories();
-        sidebar.updateCategories(categories);
-    }
-
-    // ── Navigation ────────────────────────────────────────────────────────────
-
-    private void onNavigate(Sidebar.NavItem item) {
-        hideDetail();
-        switch (item) {
-            case Sidebar.NavItem.AllTasks() -> {
-                listVm.showArchivedProperty().set(false);
-                listVm.selectedCategoryProperty().set(null);
-                taskListView.setViewTitle("All Tasks");
-                showView(taskListView);
-            }
-            case Sidebar.NavItem.Archive() -> {
-                listVm.showArchivedProperty().set(true);
-                listVm.selectedCategoryProperty().set(null);
-                taskListView.setViewTitle("Archive");
-                showView(taskListView);
-            }
-            case Sidebar.NavItem.ByCategory(var cat) -> {
-                listVm.showArchivedProperty().set(false);
-                listVm.selectedCategoryProperty().set(cat);
-                taskListView.setViewTitle(cat.getName());
-                showView(taskListView);
-            }
-            case Sidebar.NavItem.Today() -> {
-                todayVm.reload();
-                showView(todayView);
-            }
-            case Sidebar.NavItem.ThisWeek() -> {
-                weekVm.reload();
-                showView(weekView);
-            }
-            case Sidebar.NavItem.Eisenhower() -> {
-                eisenhowerVm.reload();
-                showView(eisenhowerView);
-            }
-            case Sidebar.NavItem.Pomodoro() -> showView(pomodoroView);
-            case Sidebar.NavItem.Goals() -> {
-                goalsVm.reload();
-                showView(goalsView);
-            }
-            case Sidebar.NavItem.Dashboard() -> {
-                dashboardView.refresh();
-                showView(dashboardView);
-            }
-        }
-    }
-
-    private void showView(javafx.scene.Node view) {
-        javafx.scene.Node current = getCenter();
-        if (current == view) return;
-
-        if (current != null) {
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(100), current);
-            fadeOut.setFromValue(current.getOpacity());
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(e -> {
-                setCenter(view);
-                view.setOpacity(0.0);
-                FadeTransition fadeIn = new FadeTransition(Duration.millis(160), view);
-                fadeIn.setFromValue(0.0);
-                fadeIn.setToValue(1.0);
-                fadeIn.play();
-            });
-            fadeOut.play();
+        URL url = prepareWebUI();
+        if (url != null) {
+            engine.load(url.toExternalForm());
+            log.info("Loading WebUI from: {}", url);
         } else {
-            setCenter(view);
+            log.error("webui/index.html not found — run 'npm run build' first");
+            engine.loadContent("""
+                <html><body style="background:#090d18;color:#94a3b8;font-family:sans-serif;
+                  display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+                  <div style="text-align:center">
+                    <h2 style="color:#6366f1">Nexus</h2>
+                    <p>UI not found. Run <code>npm run build</code> inside
+                       <code>src/main/webui/</code> then restart.</p>
+                  </div></body></html>""");
+        }
+
+        getChildren().add(webView);
+    }
+
+    /**
+     * Returns the URL to load in the WebView.
+     *
+     * <p>Dev mode (classpath = filesystem): load directly.
+     * Packaged mode (classpath = JAR): extract the whole {@code /webui/}
+     * tree to a temp dir so WebKit can resolve JS/CSS via {@code file://}.
+     */
+    private URL prepareWebUI() {
+        URL indexUrl = getClass().getResource("/webui/index.html");
+        if (indexUrl == null) return null;
+
+        if ("file".equals(indexUrl.getProtocol())) {
+            return indexUrl; // development — filesystem path works fine
+        }
+
+        // Packaged inside a JAR — extract to temp dir
+        try {
+            Path tempDir = Files.createTempDirectory("nexus-webui-");
+            log.info("Extracting WebUI to temp dir: {}", tempDir);
+
+            URLConnection conn = indexUrl.openConnection();
+            if (conn instanceof JarURLConnection jarConn) {
+                try (JarFile jar = jarConn.getJarFile()) {
+                    jar.stream()
+                       .filter(e -> e.getName().startsWith("webui/") && !e.isDirectory())
+                       .forEach(e -> extractEntry(jar, e, tempDir));
+                }
+            }
+
+            return tempDir.resolve("index.html").toUri().toURL();
+        } catch (Exception e) {
+            log.error("Failed to extract WebUI to temp dir", e);
+            return indexUrl; // last-resort fallback
         }
     }
 
-    // ── Detail panel ──────────────────────────────────────────────────────────
-
-    private void showDetail() {
-        detailPanel.setVisible(true);
-        detailPanel.setManaged(true);
-    }
-
-    private void hideDetail() {
-        detailPanel.setVisible(false);
-        detailPanel.setManaged(false);
-        if (getCenter() == taskListView) {
-            taskListView.clearSelection();
+    private void extractEntry(JarFile jar, JarEntry entry, Path targetDir) {
+        try {
+            String relative = entry.getName().substring("webui/".length());
+            Path target = targetDir.resolve(relative);
+            Files.createDirectories(target.getParent());
+            try (InputStream is = jar.getInputStream(entry)) {
+                Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract {}", entry.getName(), e);
         }
-    }
-
-    // ── Theme ─────────────────────────────────────────────────────────────────
-
-    private void toggleTheme(ToggleButton btn) {
-        isDarkTheme = !isDarkTheme;
-        if (isDarkTheme) {
-            Application.setUserAgentStylesheet(new PrimerDark().getUserAgentStylesheet());
-            btn.setGraphic(new FontIcon(MaterialDesignW.WEATHER_NIGHT));
-        } else {
-            Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet());
-            btn.setGraphic(new FontIcon(MaterialDesignW.WEATHER_SUNNY));
-        }
-        loadStylesheets();
-    }
-
-    private void loadStylesheets() {
-        getStylesheets().clear();
-        var css = getClass().getResource("/css/nexus.css");
-        if (css != null) getStylesheets().add(css.toExternalForm());
-    }
-
-    private void showErrorAlert(String header, String detail) {
-        javafx.scene.control.Alert alert =
-            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR);
-        alert.setTitle("Error");
-        alert.setHeaderText(header);
-        alert.setContentText(detail);
-        alert.showAndWait();
     }
 }

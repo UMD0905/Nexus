@@ -1,20 +1,16 @@
 package com.nexus;
 
-import atlantafx.base.theme.PrimerDark;
 import com.nexus.config.AppContext;
 import com.nexus.ui.MainWindow;
+import com.nexus.ui.NexusBridge;
 import javafx.application.Application;
 import javafx.scene.Scene;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * JavaFX {@link Application} entry point.
- *
- * <p>Deliberately kept thin: wires the AppContext and the root scene,
- * nothing else.  Business logic stays in the service layer.
- */
 public class NexusApp extends Application {
 
     private static final Logger log = LoggerFactory.getLogger(NexusApp.class);
@@ -23,20 +19,22 @@ public class NexusApp extends Application {
     public void start(Stage stage) {
         log.info("Starting Nexus UI...");
 
-        // Apply AtlantaFX dark theme (PrimerDark) before any nodes are created
-        Application.setUserAgentStylesheet(new PrimerDark().getUserAgentStylesheet());
-
-        // Bootstrap the DI container (creates pool, runs migrations, wires services)
         AppContext ctx = AppContext.getInstance();
 
-        // Root window
-        MainWindow mainWindow = new MainWindow(ctx);
-        Scene scene = new Scene(mainWindow, 1280, 780);
+        // Bridge needs stage reference so JS can minimize/close
+        NexusBridge bridge = new NexusBridge(ctx, stage);
 
+        MainWindow mainWindow = new MainWindow(ctx, bridge);
+        Scene scene = new Scene(mainWindow, 1920, 1200);
+        scene.setFill(Color.web("#090d18"));
+
+        // Remove native title bar — no white line, clean full-screen look
+        stage.initStyle(StageStyle.UNDECORATED);
         stage.setTitle("Nexus");
-        stage.setMinWidth(800);
+        stage.setMinWidth(900);
         stage.setMinHeight(600);
         stage.setScene(scene);
+        stage.setMaximized(true);
         stage.show();
 
         log.info("Nexus started.");

@@ -91,6 +91,8 @@ public class DatabaseConfig {
                            .toString()
                            .replace("\\", "/");
         // AUTO_SERVER=FALSE — single process, no TCP mode needed for a desktop app
-        return "jdbc:h2:file:" + path + ";DB_CLOSE_ON_EXIT=FALSE";
+        // WRITE_DELAY=0  → every committed transaction is immediately written to the WAL on disk.
+        // Without this, H2 buffers writes for up to 500 ms; a crash in that window loses data.
+        return "jdbc:h2:file:" + path + ";DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=0";
     }
 }

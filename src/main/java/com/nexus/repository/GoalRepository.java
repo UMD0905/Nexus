@@ -91,6 +91,20 @@ public class GoalRepository {
             .fetch(GOAL_TASKS.TASK_ID);
     }
 
+    /** Returns the first goalId this task is linked to, or empty. */
+    public Optional<Long> findGoalIdByTaskId(long taskId) {
+        return dsl.select(GOAL_TASKS.GOAL_ID)
+            .from(GOAL_TASKS)
+            .where(GOAL_TASKS.TASK_ID.eq(taskId))
+            .limit(1)
+            .fetchOptional(GOAL_TASKS.GOAL_ID);
+    }
+
+    /** Removes all goal links for a task (called before re-linking). */
+    public void unlinkTaskFromAllGoals(long taskId) {
+        dsl.deleteFrom(GOAL_TASKS).where(GOAL_TASKS.TASK_ID.eq(taskId)).execute();
+    }
+
     // ── Mapping ───────────────────────────────────────────────────────────────
 
     private void applyToRecord(Goal goal, org.jooq.Record record) {

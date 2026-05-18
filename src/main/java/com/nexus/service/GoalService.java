@@ -109,6 +109,19 @@ public class GoalService {
         goalRepo.unlinkTask(goalId, taskId);
     }
 
+    /** Returns the goalId this task is currently linked to, or empty. */
+    public Optional<Long> findGoalIdByTask(long taskId) {
+        return goalRepo.findGoalIdByTaskId(taskId);
+    }
+
+    /** Replaces any existing goal link for the task with a new one (or clears it). */
+    public void relinkTask(long taskId, Long newGoalId) {
+        goalRepo.unlinkTaskFromAllGoals(taskId);
+        if (newGoalId != null) {
+            goalRepo.linkTask(newGoalId, taskId);
+        }
+    }
+
     // ── Private ───────────────────────────────────────────────────────────────
 
     private void enrich(Goal goal) {
@@ -120,6 +133,10 @@ public class GoalService {
             .map(taskRepo::findById)
             .filter(Optional::isPresent)
             .map(Optional::get)
+            // Exclude soft-deleted recurring instances (CANCELLED + archived) from goal progress.
+            .filter(t -> !(t.getRecurrenceRuleId() != null
+                           && t.getStatus() == com.nexus.model.enums.TaskStatus.CANCELLED
+                           && t.isArchived()))
             .toList();
         goal.setTasks(tasks);
     }

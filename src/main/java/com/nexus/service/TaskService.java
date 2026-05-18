@@ -197,9 +197,35 @@ public class TaskService {
         return toArchive.size();
     }
 
+    /**
+     * Deletes a task permanently.
+     *
+     * <p>Non-recurring tasks are hard-deleted from the database.
+     *
+     * <p>Recurring task <em>instances</em> (tasks that have a {@code recurrenceRuleId}) are
+     * <em>soft-deleted</em>: the row is kept in the database with
+     * {@code status=CANCELLED} and {@code is_archived=TRUE}.  This is necessary because
+     * {@link RecurrenceService#generateUpcoming} deduplicates by (ruleId, dueDate) — if the
+     * row were hard-deleted, the service would blindly recreate the instance on the next
+     * application startup.  A soft-deleted row acts as a permanent "skip this date" marker
+     * while remaining invisible to all active-task queries.
+     */
     public void deleteTask(long taskId) {
-        taskRepository.delete(taskId);
-        log.info("Deleted task id={}", taskId);
+        Task task = taskRepository.findById(taskId).orElse(null);
+        if (task == null) return;
+
+        if (task.getRecurrenceRuleId() != null) {
+            // Soft-delete: mark cancelled + archived so RecurrenceService skips this date.
+            task.setStatus(TaskStatus.CANCELLED);
+            task.setArchived(true);
+            task.setArchivedAt(LocalDateTime.now());
+            task.setUpdatedAt(LocalDateTime.now());
+            taskRepository.update(task);
+            log.info("Soft-deleted recurring task instance id={} (rule={})", taskId, task.getRecurrenceRuleId());
+        } else {
+            taskRepository.delete(taskId);
+            log.info("Deleted task id={}", taskId);
+        }
     }
 
     // ── Tag management ────────────────────────────────────────────────────────

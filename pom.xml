@@ -73,6 +73,12 @@
       <artifactId>javafx-swing</artifactId>
       <version>${javafx.version}</version>
     </dependency>
+    <!-- WebView (Chromium-based, needed for React frontend) -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-web</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
 
     <!-- ═══════════════════════ UI Toolkit ═══════════════════════ -->
     <dependency>
@@ -301,6 +307,7 @@
             <option>--add-exports=javafx.base/com.sun.javafx.event=ALL-UNNAMED</option>
             <option>--add-opens=javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED</option>
             <option>--add-opens=javafx.controls/com.sun.javafx.scene.control.behavior=ALL-UNNAMED</option>
+            <option>--add-exports=javafx.web/com.sun.webkit=ALL-UNNAMED</option>
           </options>
         </configuration>
       </plugin>
@@ -365,6 +372,12 @@
         <dependency>
           <groupId>org.openjfx</groupId>
           <artifactId>javafx-media</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.openjfx</groupId>
+          <artifactId>javafx-web</artifactId>
           <version>${javafx.version}</version>
           <classifier>win</classifier>
         </dependency>

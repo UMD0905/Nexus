@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme variables ─────────────────────────────────────────────────────── */
+/* Light mode (default) */
+:root {
+  --color-canvas:     #f0f4f8;
+  --color-surface:    #ffffff;
+  --color-overlay:    #e8edf5;
+  --color-fg:         #0f172a;
+  --color-fg-muted:   #475569;
+  --color-fg-subtle:  #64748b;
+  --color-border:     rgba(0,0,0,0.09);
+  --color-track:      rgba(0,0,0,0.10);
+  --color-inactive:   rgba(0,0,0,0.12);
+}
+
+/* Dark mode */
+html.dark {
+  --color-canvas:     #090d18;
+  --color-surface:    #0d1526;
+  --color-overlay:    #1a2235;
+  --color-fg:         #e2e8f0;
+  --color-fg-muted:   #94a3b8;
+  --color-fg-subtle:  #4b5563;
+  --color-border:     rgba(255,255,255,0.07);
+  --color-track:      rgba(255,255,255,0.05);
+  --color-inactive:   rgba(255,255,255,0.10);
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+@layer base {
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; margin: 0; padding: 0; }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    transition: background 0.2s, color 0.2s;
+  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.6); }
+}
+
+/* ── Components ──────────────────────────────────────────────────────────── */
+@layer components {
+  .glass {
+    background: rgba(17, 24, 39, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--color-border);
+  }
+  .card {
+    @apply bg-surface rounded-xl shadow-card;
+    border: 1px solid var(--color-border);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .card:hover {
+    border-color: rgba(99,102,241,0.3);
+    box-shadow: 0 4px 32px rgba(0,0,0,0.15);
+  }
+  .btn-primary {
+    @apply bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium transition-all;
+    box-shadow: 0 0 0 0 rgba(99,102,241,0);
+  }
+  .btn-primary:hover {
+    background: #4f46e5;
+    box-shadow: 0 0 16px rgba(99,102,241,0.4);
+  }
+  .btn-ghost {
+    @apply text-fg-muted px-3 py-2 rounded-lg text-sm transition-all;
+  }
+  .btn-ghost:hover { @apply bg-black/[0.06] text-fg; }
+  html.dark .btn-ghost:hover { @apply bg-white/[0.06] text-fg; }
+  .input {
+    @apply bg-overlay rounded-lg px-3 py-2 text-sm text-fg placeholder-fg-subtle outline-none w-full transition-all;
+    border: 1px solid var(--color-border);
+  }
+  .input:focus {
+    border-color: rgba(99,102,241,0.5);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .priority-bar { @apply absolute left-0 top-0 bottom-0 w-1 rounded-l-xl; }
+}
+
+/* ── Light-mode overrides for hardcoded dark utility classes ─────────────── */
+/* Toolbar / panel backgrounds */
+html:not(.dark) [class*="bg-[#0e1524]"],
+html:not(.dark) [class*="bg-[#0a1020]"],
+html:not(.dark) [class*="bg-[#0c1220]"] {
+  background-color: #f1f5f9 !important;
+}
+/* Sidebar gradient start */
+html:not(.dark) [class*="from-[#0c1220]"] {
+  --tw-gradient-from: #ffffff var(--tw-gradient-from-position) !important;
+}
+/* White-alpha borders → dark-alpha */
+html:not(.dark) [class*="border-white/"] {
+  border-color: rgba(0,0,0,0.09) !important;
+}
+/* Divide lines (Week view column separators etc.) */
+html:not(.dark) [class*="divide-white/"] > * + * {
+  border-color: rgba(0,0,0,0.07) !important;
+}
+/* White-alpha background tints (progress tracks, subtle fills, etc.) */
+html:not(.dark) [class*="bg-white/"] {
+  background-color: rgba(0,0,0,0.04) !important;
+}
+/* White-alpha hover states (window controls, action buttons, etc.) */
+html:not(.dark) [class*="hover:bg-white/"]:hover {
+  background-color: rgba(0,0,0,0.06) !important;
+}
