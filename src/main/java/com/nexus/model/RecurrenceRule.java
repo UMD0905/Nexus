@@ -26,4 +26,14 @@ public class RecurrenceRule {
     private int           intervalVal;
     /** Inclusive end date; null = repeat forever. */
     private LocalDate     endDate;
+    /** Day of month for MONTHLY / YEARLY (1-31, or -1 = last day of month). */
+    private Integer       dayOfMonth;
+    /** Month of year for YEARLY recurrence (1 = January … 12 = December). */
+    private Integer       monthOfYear;
+    /**
+     * FIXED = generate instances on the calendar schedule regardless of completion.
+     * AFTER_COMPLETION = generate the next instance only when the current one is marked done.
+     */
+    @Builder.Default
+    private String        mode = "FIXED";
 }

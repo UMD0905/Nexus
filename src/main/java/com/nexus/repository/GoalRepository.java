@@ -2,6 +2,7 @@ package com.nexus.repository;
 
 import com.nexus.model.Goal;
 import org.jooq.DSLContext;
+import org.jooq.impl.DSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +12,7 @@ import java.util.Optional;
 
 import static com.nexus.db.Tables.GOALS;
 import static com.nexus.db.Tables.GOAL_TASKS;
+import static com.nexus.db.Tables.TASKS;
 
 /**
  * Data-access layer for {@link Goal}.
@@ -103,6 +105,40 @@ public class GoalRepository {
     /** Removes all goal links for a task (called before re-linking). */
     public void unlinkTaskFromAllGoals(long taskId) {
         dsl.deleteFrom(GOAL_TASKS).where(GOAL_TASKS.TASK_ID.eq(taskId)).execute();
+    }
+
+    /**
+     * Finds the first goal linked to any task that belongs to the given recurrence rule.
+     * Used by RecurrenceService to copy goal links to newly generated task instances.
+     */
+    public Optional<Long> findGoalIdByRuleId(long ruleId) {
+        return dsl.select(GOAL_TASKS.GOAL_ID)
+            .from(GOAL_TASKS)
+            .join(TASKS).on(GOAL_TASKS.TASK_ID.eq(TASKS.ID))
+            .where(TASKS.RECURRENCE_RULE_ID.eq(ruleId))
+            .limit(1)
+            .fetchOptional(GOAL_TASKS.GOAL_ID);
+    }
+
+    // ── Multi-category join table ─────────────────────────────────────────────
+
+    public List<Long> getGoalCategoryIds(long goalId) {
+        return dsl.select(DSL.field("CATEGORY_ID", Long.class))
+            .from(DSL.table("GOAL_CATEGORIES"))
+            .where(DSL.field("GOAL_ID", Long.class).eq(goalId))
+            .fetch(DSL.field("CATEGORY_ID", Long.class));
+    }
+
+    public void setGoalCategories(long goalId, List<Long> categoryIds) {
+        dsl.deleteFrom(DSL.table("GOAL_CATEGORIES"))
+            .where(DSL.field("GOAL_ID", Long.class).eq(goalId))
+            .execute();
+        for (Long catId : categoryIds) {
+            dsl.insertInto(DSL.table("GOAL_CATEGORIES"))
+                .set(DSL.field("GOAL_ID",     Long.class), goalId)
+                .set(DSL.field("CATEGORY_ID", Long.class), catId)
+                .execute();
+        }
     }
 
     // ── Mapping ───────────────────────────────────────────────────────────────

@@ -1,14 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Pause, RotateCcw, SkipForward, Coffee, Brain } from 'lucide-react'
+import { Play, Pause, RotateCcw, SkipForward, Coffee, Brain, Volume2, VolumeX, Link } from 'lucide-react'
 import * as bridge from '../bridge'
+import type { Task } from '../types'
 
 type Phase = 'work' | 'short' | 'long'
-
-const PHASE_DURATIONS: Record<Phase, number> = {
-  work:  25 * 60,
-  short: 5  * 60,
-  long:  15 * 60,
-}
 
 const PHASE_META: Record<Phase, { label: string; color: string; Icon: React.ElementType }> = {
   work:  { label: 'Focus',       color: '#6366f1', Icon: Brain   },
@@ -18,20 +13,62 @@ const PHASE_META: Record<Phase, { label: string; color: string; Icon: React.Elem
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 
+function playAlarm(type: 'work' | 'break') {
+  try { (window as any).nexusBridge?.planning?.playAlarm(type) }
+  catch { /* bridge not available in browser preview */ }
+}
+
 export default function Pomodoro() {
-  const [phase, setPhase]       = useState<Phase>('work')
-  const [seconds, setSeconds]   = useState(PHASE_DURATIONS.work)
-  const [running, setRunning]   = useState(false)
-  const [session, setSession]   = useState(0)   // pomodoros completed this sitting
-  const [target, setTarget]     = useState(25)  // configurable work minutes
-  const [shortBrk, setShortBrk] = useState(5)
-  const [longBrk, setLongBrk]   = useState(15)
+  const [phase, setPhase]         = useState<Phase>('work')
+  const [seconds, setSeconds]     = useState(25 * 60)
+  const [running, setRunning]     = useState(false)
+  const [session, setSession]     = useState(0)
+  const [target, setTarget]       = useState(25)
+  const [shortBrk, setShortBrk]   = useState(5)
+  const [longBrk, setLongBrk]     = useState(15)
+  const [muted, setMuted]         = useState(false)
+  const [tasks, setTasks]         = useState<Task[]>([])
+  const [linkedTaskId, setLinkedTaskId] = useState<number>(0)
+  const [sessionId, setSessionId] = useState<number>(0)
+
   const intervalRef = useRef<number | null>(null)
+  const mutedRef    = useRef(false)
+
+  useEffect(() => { mutedRef.current = muted }, [muted])
+
+  // Load settings + tasks on mount
+  useEffect(() => {
+    const s = bridge.getSettings()
+    const workMin  = parseInt(s['pomodoro_work_min']  ?? '25', 10) || 25
+    const shortMin = parseInt(s['pomodoro_short_min'] ?? '5',  10) || 5
+    const longMin  = parseInt(s['pomodoro_long_min']  ?? '15', 10) || 15
+    setTarget(workMin)
+    setShortBrk(shortMin)
+    setLongBrk(longMin)
+    setSeconds(workMin * 60)
+
+    // Load active tasks for picker
+    const activeTasks = bridge.getTasks({ status: 'TODO' })
+      .concat(bridge.getTasks({ status: 'IN_PROGRESS' }))
+    setTasks(activeTasks)
+  }, [])
 
   const total = phase === 'work' ? target * 60 : phase === 'short' ? shortBrk * 60 : longBrk * 60
   const pct = ((total - seconds) / total) * 100
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
+
+  const startSession = () => {
+    if (phase === 'work') {
+      const id = bridge.startPomodoroSession(linkedTaskId, target)
+      setSessionId(id)
+    }
+    setRunning(true)
+  }
+
+  const pauseSession = () => {
+    setRunning(false)
+  }
 
   useEffect(() => {
     if (running) {
@@ -41,8 +78,12 @@ export default function Pomodoro() {
             clearInterval(intervalRef.current!)
             setRunning(false)
             if (phase === 'work') {
-              bridge.logPomodoro()
+              if (sessionId > 0) bridge.completePomodoroSession(sessionId)
+              setSessionId(0)
               setSession(n => n + 1)
+              if (!mutedRef.current) playAlarm('work')
+            } else {
+              if (!mutedRef.current) playAlarm('break')
             }
             return 0
           }
@@ -53,16 +94,28 @@ export default function Pomodoro() {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [running, phase])
+  }, [running, phase, sessionId])
 
   const switchPhase = (p: Phase) => {
+    if (running && sessionId > 0) {
+      bridge.abandonPomodoroSession(sessionId)
+      setSessionId(0)
+    }
     setRunning(false)
     setPhase(p)
     setSeconds(p === 'work' ? target * 60 : p === 'short' ? shortBrk * 60 : longBrk * 60)
   }
 
-  const reset = () => { setRunning(false); setSeconds(total) }
-  const skip  = () => {
+  const reset = () => {
+    if (running && sessionId > 0) {
+      bridge.abandonPomodoroSession(sessionId)
+      setSessionId(0)
+    }
+    setRunning(false)
+    setSeconds(total)
+  }
+
+  const skip = () => {
     const next: Phase = phase === 'work'
       ? session > 0 && session % 4 === 3 ? 'long' : 'short'
       : 'work'
@@ -74,12 +127,22 @@ export default function Pomodoro() {
   const circumference = 2 * Math.PI * r
   const dashOffset = circumference * (1 - pct / 100)
 
+  const linkedTask = tasks.find(t => t.id === linkedTaskId)
+
   return (
     <div className="flex flex-col h-full bg-canvas">
       {/* Toolbar */}
       <div className="px-6 py-3.5 border-b border-white/[0.06] bg-[#0e1524] flex items-center gap-3 shrink-0">
         <h1 className="text-lg font-bold text-fg flex-1">Pomodoro</h1>
         <span className="text-xs text-fg-subtle">{session} sessions today</span>
+        <button
+          onClick={() => setMuted(m => !m)}
+          title={muted ? 'Unmute alarm' : 'Mute alarm'}
+          className="p-1.5 rounded hover:bg-white/[0.08] transition-colors">
+          {muted
+            ? <VolumeX size={16} className="text-fg-subtle" />
+            : <Volume2 size={16} className="text-fg-subtle" />}
+        </button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -99,12 +162,28 @@ export default function Pomodoro() {
             ))}
           </div>
 
+          {/* Task picker */}
+          {phase === 'work' && (
+            <div className="flex items-center gap-2 w-full max-w-xs">
+              <Link size={13} className="text-fg-subtle shrink-0" />
+              <select
+                className="input text-xs py-1.5 flex-1"
+                value={linkedTaskId}
+                onChange={e => setLinkedTaskId(Number(e.target.value))}
+                disabled={running}
+              >
+                <option value={0}>— No task (free focus) —</option>
+                {tasks.map(t => (
+                  <option key={t.id} value={t.id}>{t.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Circular timer */}
           <div className="relative">
             <svg width="220" height="220" className="-rotate-90">
-              {/* Track */}
               <circle cx="110" cy="110" r={r} fill="none" style={{ stroke: 'var(--color-track)' }} strokeWidth="8" />
-              {/* Progress */}
               <circle
                 cx="110" cy="110" r={r}
                 fill="none"
@@ -117,13 +196,17 @@ export default function Pomodoro() {
               />
             </svg>
 
-            {/* Center content */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <Icon size={20} style={{ color }} className="mb-1 opacity-80" />
               <span className="text-5xl font-bold text-fg tabular-nums" style={{ textShadow: `0 0 40px ${color}40` }}>
                 {pad(mins)}:{pad(secs)}
               </span>
               <span className="text-xs text-fg-subtle mt-1">{PHASE_META[phase].label}</span>
+              {linkedTask && phase === 'work' && (
+                <span className="text-[10px] text-accent/70 mt-1 max-w-[140px] truncate text-center">
+                  🍅 {linkedTask.title}
+                </span>
+              )}
             </div>
           </div>
 
@@ -135,7 +218,7 @@ export default function Pomodoro() {
             </button>
 
             <button
-              onClick={() => setRunning(r => !r)}
+              onClick={() => running ? pauseSession() : startSession()}
               className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold shadow-lg transition-all hover:scale-105 active:scale-95"
               style={{ background: color, boxShadow: `0 0 32px ${color}60` }}>
               {running ? <Pause size={22} /> : <Play size={22} className="ml-0.5" />}

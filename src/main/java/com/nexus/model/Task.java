@@ -41,6 +41,7 @@ public class Task {
     private TaskStatus    status    = TaskStatus.TODO;
 
     private LocalDateTime dueDate;
+    private java.time.LocalTime startTime;   // when the task is planned to begin
     private Integer       estimatedMinutes;
     @Builder.Default
     private int           actualMinutes = 0;  // accumulated from Pomodoro sessions
@@ -51,6 +52,20 @@ public class Task {
 
     private boolean       important;  // Eisenhower: important axis
     private boolean       urgent;     // Eisenhower: urgent axis
+
+    // ── Defer / GTD ──────────────────────────────────────────────
+    /** Task is hidden from main views until this time passes. */
+    private LocalDateTime deferUntil;
+    /**
+     * GTD lifecycle bucket: INBOX | ANYTIME | TODAY | SOMEDAY.
+     * Quick-add lands tasks in INBOX; default for normal creation is ANYTIME.
+     */
+    @Builder.Default
+    private String        lifecycle = "ANYTIME";
+
+    // ── Snooze ────────────────────────────────────────────────────
+    /** When set, reminders for this task are suppressed until this time. */
+    private LocalDateTime snoozedUntil;
 
     // ── Archive ───────────────────────────────────────────────────
     private LocalDateTime completedAt;
@@ -64,6 +79,9 @@ public class Task {
     // ── Enriched (loaded on demand by service layer) ──────────────
     @ToString.Exclude
     private Category      category;
+    @ToString.Exclude
+    @Builder.Default
+    private List<Category> categories = new ArrayList<>();  // all assigned life areas
     @ToString.Exclude
     @Builder.Default
     private List<Tag>     tags     = new ArrayList<>();

@@ -7,6 +7,7 @@ import com.nexus.model.TaskFilter;
 import com.nexus.model.enums.Priority;
 import com.nexus.model.enums.TaskStatus;
 import com.nexus.repository.CategoryRepository;
+import com.nexus.repository.GoalRepository;
 import com.nexus.repository.SubtaskRepository;
 import com.nexus.repository.TagRepository;
 import com.nexus.repository.TaskRepository;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -41,13 +43,16 @@ class TaskServiceTest {
     @Mock TagRepository          tagRepository;
     @Mock SubtaskRepository      subtaskRepository;
     @Mock StreakService          streakService;
+    @Mock GoalRepository         goalRepository;
+    @Mock GoalService            goalService;
 
     TaskService service;
 
     @BeforeEach
     void setUp() {
         service = new TaskService(taskRepository, categoryRepository,
-                                  tagRepository, subtaskRepository, streakService);
+                                  tagRepository, subtaskRepository, streakService,
+                                  goalRepository, goalService);
     }
 
     // ── createTask ────────────────────────────────────────────────────────────
@@ -225,7 +230,8 @@ class TaskServiceTest {
 
         when(taskRepository.findAll(any(TaskFilter.class))).thenReturn(List.of(task));
         when(categoryRepository.findAll()).thenReturn(List.of(cat));
-        when(tagRepository.findByTaskId(1L)).thenReturn(List.of(tag));
+        when(tagRepository.findByTaskIds(List.of(1L))).thenReturn(Map.of(1L, List.of(tag)));
+        when(taskRepository.getTaskCategoryIdsBatch(List.of(1L))).thenReturn(Map.of());
 
         List<Task> result = service.getTasks(TaskFilter.allActive());
 
@@ -237,10 +243,34 @@ class TaskServiceTest {
     // ── deleteTask ────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("deleteTask delegates to the repository")
-    void deleteTask_callsRepository() {
+    @DisplayName("deleteTask hard-deletes a non-recurring task")
+    void deleteTask_nonRecurring_hardDeletes() {
+        Task task = Task.builder().id(99L).title("One-off").priority(Priority.LOW)
+                        .status(TaskStatus.TODO).build();
+        when(taskRepository.findById(99L)).thenReturn(Optional.of(task));
+
         service.deleteTask(99L);
+
         verify(taskRepository).delete(99L);
+        verify(taskRepository, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("deleteTask soft-deletes a recurring task instance")
+    void deleteTask_recurring_softDeletes() {
+        Task task = Task.builder().id(55L).title("Daily standup")
+                        .priority(Priority.MEDIUM).status(TaskStatus.TODO)
+                        .recurrenceRuleId(3L).build();
+        when(taskRepository.findById(55L)).thenReturn(Optional.of(task));
+        when(taskRepository.update(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.deleteTask(55L);
+
+        verify(taskRepository, never()).delete(anyLong());
+        var captor = ArgumentCaptor.forClass(Task.class);
+        verify(taskRepository).update(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(TaskStatus.CANCELLED);
+        assertThat(captor.getValue().isArchived()).isTrue();
     }
 
     // ── updateTask ────────────────────────────────────────────────────────────

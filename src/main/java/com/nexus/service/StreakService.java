@@ -30,6 +30,25 @@ public class StreakService {
         this.categoryRepo = categoryRepo;
     }
 
+    // ── Creation ──────────────────────────────────────────────────────────────
+
+    /**
+     * Creates a new streak row for a freshly created recurrence rule.
+     * Called when the user creates a recurring task via the UI.
+     */
+    public Streak createStreakForRule(long ruleId, String title, Long categoryId) {
+        Streak streak = Streak.builder()
+            .recurrenceRuleId(ruleId)
+            .title(title)
+            .categoryId(categoryId)
+            .currentStreak(0)
+            .longestStreak(0)
+            .build();
+        Streak saved = streakRepo.save(streak);
+        log.info("Created streak '{}' for rule id={}", title, ruleId);
+        return saved;
+    }
+
     // ── Queries ───────────────────────────────────────────────────────────────
 
     /** Returns all streaks, enriched with their category. */

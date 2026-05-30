@@ -1,6 +1,9 @@
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
 export type GoalStatus = 'ACTIVE' | 'COMPLETED' | 'ABANDONED'
+export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+export type Lifecycle = 'INBOX' | 'ANYTIME' | 'TODAY' | 'SOMEDAY'
+export type RecurrenceMode = 'FIXED' | 'AFTER_COMPLETION'
 
 export interface Category {
   id: number
@@ -15,26 +18,68 @@ export interface Tag {
   color: string
 }
 
+export interface Subtask {
+  id: number
+  taskId: number
+  title: string
+  done: boolean
+  position: number
+}
+
+export interface Project {
+  id: number
+  name: string
+  description?: string
+  categoryId?: number
+  category?: Category
+  color: string
+  startDate?: string
+  dueDate?: string
+  status: ProjectStatus
+  createdAt: string
+  updatedAt: string
+  /** Computed on demand by the bridge: count of active tasks. */
+  taskCount?: number
+  /** Computed on demand by the bridge: 0–100 % done. */
+  progress?: number
+}
+
 export interface Task {
   id: number
   title: string
   description?: string
   categoryId?: number
   category?: Category
+  categoryIds: number[]
+  categories: Category[]
+  projectId?: number
   priority: Priority
   status: TaskStatus
-  dueDate?: string
+  lifecycle: Lifecycle
+  dueDate?: string       // ISO datetime — the due/end datetime
+  deferUntil?: string    // ISO datetime — hidden from main views until after this
+  startTime?: string     // "HH:mm" — when the task is planned to begin
   estimatedMinutes?: number
-  actualMinutes?: number
+  actualMinutes?: number    // total minutes from completed Pomodoro sessions
+  snoozedUntil?: string     // ISO datetime — task won't fire reminders until after this
   urgent: boolean
   important: boolean
   archived: boolean
   goalId?: number
   recurrenceRuleId?: number
   tags: Tag[]
+  subtasks?: Subtask[]
   createdAt: string
   updatedAt: string
   completedAt?: string
+}
+
+export type RecurrenceType = 'DAILY' | 'WEEKDAYS' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+
+export interface MonthlyStats {
+  yearMonth: string   // "2026-05"
+  monthName: string   // "May 2026"
+  completed: number
 }
 
 export interface LinkedTask {
@@ -49,6 +94,8 @@ export interface Goal {
   description?: string
   categoryId?: number
   category?: Category
+  categoryIds: number[]
+  categories: Category[]
   targetDate?: string
   status: GoalStatus
   completed: boolean
@@ -84,9 +131,11 @@ export interface DashboardStats {
   completedThisWeek: number
   overdueTasks: number
   pomodoroToday: number
+  focusTimeThisWeek: number   // total completed Pomodoro minutes this week
   weeklyCompletions: number[]
   categoryBreakdown: Record<string, number>
   streaks: Streak[]
+  statAdjustments: Record<string, number>  // manual offsets applied to each counter
 }
 
 export interface Notification {
@@ -96,12 +145,15 @@ export interface Notification {
   type: string
   read: boolean
   createdAt: string
+  taskId?: number
 }
 
 export type NavSection =
   | 'dashboard' | 'all-tasks' | 'today' | 'week'
-  | 'goals' | 'matrix' | 'pomodoro' | 'archive' | 'calendar'
+  | 'goals' | 'matrix' | 'pomodoro' | 'archive' | 'calendar' | 'settings'
+  | 'inbox' | 'anytime' | 'someday' | 'scheduled' | 'projects' | 'review' | 'kanban'
   | { type: 'category'; category: Category }
+  | { type: 'project'; project: Project }
 
 export const PRIORITY_META: Record<Priority, { label: string; color: string; bg: string }> = {
   LOW:      { label: 'Low',      color: '#10b981', bg: 'rgba(16,185,129,0.12)' },

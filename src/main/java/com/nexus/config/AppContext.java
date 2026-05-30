@@ -42,6 +42,7 @@ public class AppContext {
     private final StreakRepository          streakRepository;
 
     // ── Services ──────────────────────────────────────────────────────────────
+    private final SettingsService     settingsService;
     private final TaskService         taskService;
     private final CategoryService     categoryService;
     private final ProjectService      projectService;
@@ -53,6 +54,8 @@ public class AppContext {
     private final GoalService         goalService;
     private final StreakService       streakService;
     private final ExportService       exportService;
+    private final ICalExportService   icalExportService;
+    private final BackupService       backupService;
 
     // ── Private constructor ───────────────────────────────────────────────────
     private AppContext() {
@@ -62,6 +65,7 @@ public class AppContext {
         this.dataSource = DatabaseConfig.createDataSource();
         DatabaseConfig.runMigrations(dataSource);
         this.dsl        = JooqConfig.createDslContext(dataSource);
+        this.settingsService = new SettingsService(dsl);
 
         // 2. Repositories
         this.taskRepository            = new TaskRepository(dsl);
@@ -76,21 +80,24 @@ public class AppContext {
         this.goalRepository            = new GoalRepository(dsl);
         this.streakRepository          = new StreakRepository(dsl);
 
-        // 3. Services (order matters — TaskService needs StreakService injected after)
+        // 3. Services (order matters — GoalService must precede TaskService)
         this.notificationService = new NotificationService(notificationRepository);
         this.categoryService     = new CategoryService(categoryRepository);
         this.projectService      = new ProjectService(projectRepository, categoryRepository);
         this.streakService       = new StreakService(streakRepository, categoryRepository);
+        this.goalService         = new GoalService(goalRepository, taskRepository, categoryRepository);
         this.taskService         = new TaskService(taskRepository, categoryRepository,
                                                    tagRepository, subtaskRepository,
-                                                   streakService);
-        this.recurrenceService   = new RecurrenceService(recurrenceRuleRepository, taskRepository);
+                                                   streakService, goalRepository, goalService);
+        this.recurrenceService   = new RecurrenceService(recurrenceRuleRepository, taskRepository, goalRepository);
+        this.taskService.setRecurrenceService(this.recurrenceService);
         this.timeBlockService    = new TimeBlockService(timeBlockRepository);
         this.pomodoroService     = new PomodoroService(pomodoroSessionRepository, taskRepository);
-        this.reminderService     = new ReminderService(taskRepository, notificationService);
-        this.goalService         = new GoalService(goalRepository, taskRepository, categoryRepository);
+        this.reminderService     = new ReminderService(taskRepository, notificationService, notificationRepository);
         this.exportService       = new ExportService(taskRepository, categoryRepository,
                                                      tagRepository, goalRepository);
+        this.icalExportService   = new ICalExportService(taskRepository, recurrenceRuleRepository);
+        this.backupService       = new BackupService(exportService, settingsService);
 
         // 4. Generate recurring task instances for the next 14 days
         try {
@@ -107,8 +114,9 @@ public class AppContext {
             log.warn("Streak expiry check failed (non-fatal): {}", e.getMessage());
         }
 
-        // 6. Start background reminder scheduler
+        // 6. Start background schedulers
         reminderService.start();
+        backupService.start();
 
         log.info("Application context ready.");
     }
@@ -126,6 +134,7 @@ public class AppContext {
 
     // ── Accessors ─────────────────────────────────────────────────────────────
 
+    public SettingsService         getSettingsService()         { return settingsService; }
     public TaskService            getTaskService()            { return taskService; }
     public CategoryService        getCategoryService()        { return categoryService; }
     public ProjectService         getProjectService()         { return projectService; }
@@ -136,13 +145,22 @@ public class AppContext {
     public ReminderService        getReminderService()        { return reminderService; }
     public GoalService            getGoalService()            { return goalService; }
     public StreakService          getStreakService()           { return streakService; }
-    public ExportService          getExportService()          { return exportService; }
-    public NotificationRepository getNotificationRepository() { return notificationRepository; }
-    public DSLContext             getDsl()                    { return dsl; }
+    public ExportService              getExportService()              { return exportService; }
+    public ICalExportService          getICalExportService()          { return icalExportService; }
+    public BackupService              getBackupService()              { return backupService; }
+    public RecurrenceRuleRepository   getRecurrenceRuleRepository()   { return recurrenceRuleRepository; }
+    public NotificationRepository     getNotificationRepository()     { return notificationRepository; }
+    public GoalRepository             getGoalRepository()             { return goalRepository; }
+    public SubtaskRepository          getSubtaskRepository()          { return subtaskRepository; }
+    public TagRepository              getTagRepository()              { return tagRepository; }
+    public TaskRepository             getTaskRepository()             { return taskRepository; }
+    public PomodoroSessionRepository  getPomodoroSessionRepository()  { return pomodoroSessionRepository; }
+    public DSLContext                 getDsl()                        { return dsl; }
 
     public void shutdown() {
         log.info("Shutting down application context...");
         reminderService.shutdown();
+        backupService.shutdown();
         if (dataSource instanceof com.zaxxer.hikari.HikariDataSource hds) {
             hds.close();
             log.info("Connection pool closed.");

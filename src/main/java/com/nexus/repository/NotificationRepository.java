@@ -16,6 +16,8 @@ public class NotificationRepository {
 
     public NotificationRepository(DSLContext dsl) { this.dsl = dsl; }
 
+    public DSLContext getDsl() { return dsl; }
+
     /** Returns all unread notifications, newest first. */
     public List<AppNotification> findUnread() {
         return dsl.selectFrom(NOTIFICATIONS)

@@ -89,6 +89,13 @@ html.dark {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold;
   }
   .priority-bar { @apply absolute left-0 top-0 bottom-0 w-1 rounded-l-xl; }
+  .form-label {
+    @apply text-[10px] font-bold text-fg-subtle uppercase tracking-wider block mb-1.5;
+  }
+  /* Time input consistent with .input class */
+  input[type="time"].input {
+    color-scheme: dark;
+  }
 }
 
 /* ── Light-mode overrides for hardcoded dark utility classes ─────────────── */

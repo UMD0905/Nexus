@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Target, CheckCircle2, Circle, ChevronDown, ChevronRight, Trash2, Pencil, X, Check } from 'lucide-react'
+import { Plus, Target, CheckCircle2, Circle, ChevronDown, ChevronRight, Trash2, Pencil, X, Check, AlertTriangle, RotateCcw } from 'lucide-react'
 import type { Goal, Category } from '../types'
 import * as bridge from '../bridge'
 import DatePicker from '../components/DatePicker'
@@ -13,17 +13,18 @@ interface Props {
 interface EditForm {
   title: string
   description: string
-  categoryId: string
+  categoryIds: number[]
   targetDate: string | undefined
 }
 
 function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Category[]; onRefresh: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const [editing,  setEditing]  = useState(false)
+  const [warnComplete, setWarnComplete] = useState(false)
   const [form, setForm] = useState<EditForm>({
     title:       goal.title,
     description: goal.description ?? '',
-    categoryId:  goal.categoryId  ? String(goal.categoryId) : '',
+    categoryIds: goal.categoryIds?.length ? goal.categoryIds : goal.categoryId ? [goal.categoryId] : [],
     targetDate:  goal.targetDate  ?? undefined,
   })
 
@@ -43,7 +44,7 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
     setForm({
       title:       goal.title,
       description: goal.description ?? '',
-      categoryId:  goal.categoryId ? String(goal.categoryId) : '',
+      categoryIds: goal.categoryIds?.length ? goal.categoryIds : goal.categoryId ? [goal.categoryId] : [],
       targetDate:  goal.targetDate ?? undefined,
     })
     setEditing(true)
@@ -62,9 +63,11 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
       id:          goal.id,
       title:       form.title.trim(),
       description: form.description || undefined,
-      categoryId:  form.categoryId ? Number(form.categoryId) : undefined,
+      categoryId:  form.categoryIds[0] ?? undefined,
+      categoryIds: form.categoryIds,
       targetDate:  form.targetDate ?? undefined,
     } as any)
+    bridge.setGoalCategories(goal.id, form.categoryIds)
     setEditing(false)
     onRefresh()
   }
@@ -101,15 +104,30 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="Description (optional)"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    className="input text-sm"
-                    value={form.categoryId}
-                    onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
-                  >
-                    <option value="">No category</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-[10px] text-fg-subtle mb-1.5">Life Areas</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {categories.map(c => {
+                        const active = form.categoryIds.includes(c.id)
+                        return (
+                          <button key={c.id} type="button"
+                            onClick={() => setForm(f => ({
+                              ...f,
+                              categoryIds: active ? f.categoryIds.filter(x => x !== c.id) : [...f.categoryIds, c.id]
+                            }))}
+                            className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                            style={{
+                              background:  active ? c.color + '28' : 'transparent',
+                              color:       active ? c.color : '#6b7280',
+                              borderColor: active ? c.color + '80' : 'rgba(255,255,255,0.08)',
+                            }}>
+                            {c.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                   <DatePicker
                     value={form.targetDate}
                     onChange={d => setForm(f => ({ ...f, targetDate: d }))}
@@ -136,12 +154,12 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
                   <span className={`text-sm font-semibold text-fg ${isDone ? 'line-through text-fg-muted' : ''}`}>
                     {goal.title}
                   </span>
-                  {goal.category && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                      style={{ color, background: color + '18' }}>
-                      {goal.category.name}
+                  {(goal.categories?.length ? goal.categories : goal.category ? [goal.category] : []).map(c => (
+                    <span key={c.id} className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                      style={{ color: c.color, background: c.color + '18' }}>
+                      {c.name}
                     </span>
-                  )}
+                  ))}
                 </div>
 
                 {/* Progress bar */}
@@ -177,12 +195,20 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
           {/* Right-side controls */}
           {!editing && (
             <div className="flex items-center gap-1 shrink-0">
-              {!isDone && (
+              {goal.status === 'ACTIVE' && (
                 <button
                   onClick={startEdit}
                   className="p-1.5 rounded-lg text-fg-subtle hover:text-accent hover:bg-accent/10 transition-colors"
                   title="Edit goal">
                   <Pencil size={13} />
+                </button>
+              )}
+              {(goal.status === 'COMPLETED' || goal.status === 'ABANDONED') && (
+                <button
+                  onClick={e => { e.stopPropagation(); bridge.updateGoalStatus(goal.id, 'ACTIVE'); onRefresh() }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
+                  title="Reactivate goal">
+                  <RotateCcw size={11} /> Reactivate
                 </button>
               )}
               <div className="text-fg-subtle p-1">
@@ -198,28 +224,68 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
         <div className="border-t border-white/[0.05] px-5 py-3 space-y-2">
           <p className="text-[9px] font-bold text-fg-subtle uppercase tracking-wider mb-2">Linked Tasks</p>
           {goal.tasks.map(t => (
-            <div key={t.id} className="flex items-center gap-2">
+            <div key={t.id} className="flex items-center gap-2 group">
               <div className="shrink-0">
                 {t.status === 'DONE'
                   ? <CheckCircle2 size={14} className="text-success" />
                   : <Circle size={14} className="text-fg-subtle" />}
               </div>
-              <span className={`text-xs ${t.status === 'DONE' ? 'line-through text-fg-muted' : 'text-fg'}`}>
+              <span className={`flex-1 text-xs ${t.status === 'DONE' ? 'line-through text-fg-muted' : 'text-fg'}`}>
                 {t.title}
               </span>
+              <button
+                onClick={() => { bridge.updateTask({ id: t.id, goalId: -1 } as any); onRefresh() }}
+                className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-fg-subtle hover:text-danger transition-all"
+                title="Unlink task from goal"
+              >
+                <X size={11} />
+              </button>
             </div>
           ))}
         </div>
       )}
 
+      {/* ── Incomplete-task warning ────────────────────────────────────────── */}
+      {warnComplete && (
+        <div className="border-t border-warning/20 bg-warning/[0.06] px-5 py-3 animate-fade-in">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={14} className="text-warning shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-warning">
+                {goal.tasks.filter(t => t.status !== 'DONE').length} task{goal.tasks.filter(t => t.status !== 'DONE').length !== 1 ? 's' : ''} not yet done
+              </p>
+              <p className="text-[10px] text-fg-subtle mt-0.5">
+                {goal.tasks.filter(t => t.status !== 'DONE').map(t => t.title).join(', ')}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end mt-3">
+            <button
+              className="btn-ghost text-xs py-1 px-3"
+              onClick={() => setWarnComplete(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn-ghost text-xs py-1 px-3 text-success"
+              onClick={() => { setWarnComplete(false); bridge.updateGoalStatus(goal.id, 'COMPLETED'); onRefresh() }}>
+              Complete anyway
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Footer actions ─────────────────────────────────────────────────── */}
-      {expanded && !editing && (
+      {expanded && !editing && !warnComplete && (
         <div className="border-t border-white/[0.05] px-5 py-3 flex items-center gap-3">
-          {!isDone && (
+          {goal.status === 'ACTIVE' && (
             <>
               <button
                 className="btn-ghost text-xs py-1 px-3 text-success"
-                onClick={() => { bridge.updateGoalStatus(goal.id, 'COMPLETED'); onRefresh() }}>
+                onClick={() => {
+                  const pending = goal.tasks.filter(t => t.status !== 'DONE')
+                  if (pending.length > 0) { setWarnComplete(true); setExpanded(true) }
+                  else { bridge.updateGoalStatus(goal.id, 'COMPLETED'); onRefresh() }
+                }}>
                 Mark Complete
               </button>
               <button
@@ -248,17 +314,21 @@ function GoalCard({ goal, categories, onRefresh }: { goal: Goal; categories: Cat
 
 export default function Goals({ goals, categories, onRefresh }: Props) {
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ title: '', categoryId: '', targetDate: undefined as string | undefined, description: '' })
+  const [form, setForm] = useState({ title: '', categoryIds: [] as number[], targetDate: undefined as string | undefined, description: '' })
 
   const handleCreate = () => {
     if (!form.title.trim()) return
-    bridge.createGoal({
+    const goal = bridge.createGoal({
       title:       form.title,
       description: form.description || undefined,
-      categoryId:  form.categoryId ? Number(form.categoryId) : undefined,
+      categoryId:  form.categoryIds[0] ?? undefined,
+      categoryIds: form.categoryIds,
       targetDate:  form.targetDate ?? undefined,
     })
-    setForm({ title: '', categoryId: '', targetDate: undefined, description: '' })
+    if (goal && form.categoryIds.length > 0) {
+      bridge.setGoalCategories(goal.id, form.categoryIds)
+    }
+    setForm({ title: '', categoryIds: [], targetDate: undefined, description: '' })
     setShowForm(false)
     onRefresh()
   }
@@ -286,12 +356,30 @@ export default function Goals({ goals, categories, onRefresh }: Props) {
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))} autoFocus />
               <textarea className="input resize-none text-sm" rows={2} placeholder="Description (optional)"
                 value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-              <div className="grid grid-cols-2 gap-3">
-                <select className="input text-sm" value={form.categoryId}
-                  onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}>
-                  <option value="">No category</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-[10px] text-fg-subtle mb-1.5">Life Areas</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {categories.map(c => {
+                      const active = form.categoryIds.includes(c.id)
+                      return (
+                        <button key={c.id} type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            categoryIds: active ? f.categoryIds.filter(x => x !== c.id) : [...f.categoryIds, c.id]
+                          }))}
+                          className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                          style={{
+                            background:  active ? c.color + '28' : 'transparent',
+                            color:       active ? c.color : '#6b7280',
+                            borderColor: active ? c.color + '80' : 'rgba(255,255,255,0.08)',
+                          }}>
+                          {c.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
                 <DatePicker
                   value={form.targetDate}
                   onChange={d => setForm(f => ({ ...f, targetDate: d }))}

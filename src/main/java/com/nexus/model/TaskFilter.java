@@ -31,6 +31,19 @@ public class TaskFilter {
     @Builder.Default
     private boolean    showArchived = false;
 
+    /**
+     * GTD lifecycle bucket filter: INBOX | ANYTIME | TODAY | SOMEDAY.
+     * Null = no filter (all buckets).
+     */
+    private String     lifecycle;
+
+    /**
+     * When {@code true}, only tasks with a future defer_until are returned (Scheduled view).
+     * When {@code false} or {@code null}, deferred tasks are excluded from results.
+     */
+    @Builder.Default
+    private boolean    showDeferred = false;
+
     /** A filter that shows all active (non-archived) tasks across all areas. */
     public static TaskFilter allActive() {
         return TaskFilter.builder().showArchived(false).build();

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock, Copy } from 'lucide-react'
 import type { Task, Category, Goal } from '../types'
 import { PRIORITY_META, STATUS_META } from '../types'
 import * as bridge from '../bridge'
@@ -92,9 +92,22 @@ export default function Calendar({ tasks, categories, goals, onRefresh }: Props)
     setShowDialog(true)
   }
 
-  const handleSave = (data: Partial<Task>) => {
+  const openCopy = (task: Task) => {
+    const { id, completedAt, recurrenceRuleId, ...rest } = task
+    setEditTask({ ...rest, title: `Copy of ${rest.title}`, status: 'TODO' })
+    setShowDialog(true)
+  }
+
+  const handleSave = (data: Partial<Task> & { recurrence?: { enabled: boolean; type: string; days: string[]; endDate: string } }) => {
     if (data.id) {
       bridge.updateTask(data as Partial<Task> & { id: number })
+    } else if (data.recurrence?.enabled) {
+      bridge.createTask({
+        ...data,
+        recurrenceType:    data.recurrence.type,
+        recurrenceDays:    data.recurrence.days.join(','),
+        recurrenceEndDate: data.recurrence.endDate || undefined,
+      } as Parameters<typeof bridge.createTask>[0])
     } else {
       bridge.createTask(data)
     }
@@ -280,13 +293,21 @@ export default function Calendar({ tasks, categories, goals, onRefresh }: Props)
                           </span>
                         )}
                       </div>
-                      {!done && (
+                      <div className="flex items-center gap-3 mt-2">
+                        {!done && (
+                          <button
+                            className="text-[9px] text-success hover:underline"
+                            onClick={e => { e.stopPropagation(); handleDone(t) }}>
+                            Mark done
+                          </button>
+                        )}
                         <button
-                          className="mt-2 text-[9px] text-success hover:underline"
-                          onClick={e => { e.stopPropagation(); handleDone(t) }}>
-                          Mark done
+                          className="text-[9px] text-fg-subtle hover:text-accent flex items-center gap-0.5 hover:underline"
+                          onClick={e => { e.stopPropagation(); openCopy(t) }}
+                          title="Duplicate task">
+                          <Copy size={9} /> Duplicate
                         </button>
-                      )}
+                      </div>
                     </div>
                   )
                 })

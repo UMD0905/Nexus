@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import { Download, RefreshCw, Flame, Snowflake, TrendingUp, Calendar, CheckCircle2, AlertTriangle, Timer, Activity } from 'lucide-react'
-import type { DashboardStats } from '../types'
+import {
+  Download, Upload, RefreshCw, Flame, Snowflake, TrendingUp, Calendar,
+  CheckCircle2, AlertTriangle, Timer, Activity, Plus, Minus,
+  RotateCcw, BarChart2, CalendarDays,
+} from 'lucide-react'
+import type { DashboardStats, MonthlyStats } from '../types'
 import * as bridge from '../bridge'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -16,65 +20,150 @@ const STAT_DEFS = [
 ] as const
 
 function tooltipStyle() {
-  const dark = document.documentElement.classList.contains('dark')
   return {
-    background: dark ? '#1a2235' : '#ffffff',
-    border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)'}`,
-    borderRadius: 8,
-    fontSize: 12,
-    color: dark ? '#e2e8f0' : '#0f172a',
+    background: '#1a2235',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8, fontSize: 12, color: '#e2e8f0',
   }
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [stats, setStats]           = useState<DashboardStats | null>(null)
+  const [monthly, setMonthly]       = useState<MonthlyStats[]>([])
+  const [showMonthly, setShowMonthly] = useState(true)
 
-  const load = () => setStats(bridge.getDashboardStats())
+  const load = () => {
+    setStats(bridge.getDashboardStats())
+    setMonthly(bridge.getMonthlyStats())
+  }
+
   useEffect(() => { load() }, [])
 
-  if (!stats) return <div className="flex items-center justify-center h-full text-fg-muted text-sm">Loading…</div>
+  if (!stats) return (
+    <div className="flex items-center justify-center h-full text-fg-muted text-sm">Loading…</div>
+  )
 
-  const barData = DAYS.map((d, i) => ({ day: d, completed: stats.weeklyCompletions[i] ?? 0, isToday: i === new Date().getDay() - 1 }))
+  const barData = DAYS.map((d, i) => ({ day: d, completed: stats.weeklyCompletions[i] ?? 0 }))
   const pieData = Object.entries(stats.categoryBreakdown).map(([name, value]) => ({ name, value }))
   const todayIdx = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
+
+  const handleAdjust = (key: string, delta: number) => {
+    bridge.adjustStat(key, delta)
+    load()
+  }
+
+  const handleReset = () => {
+    if (confirm('Clear all manual stat adjustments? Stats will be recalculated from your actual task data.')) {
+      bridge.resetStatAdjustments()
+      load()
+    }
+  }
+
+  // Find the best month for the "most productive" highlight
+  const bestMonthIdx = monthly.length > 0
+    ? monthly.reduce((best, m, i, arr) => m.completed > arr[best].completed ? i : best, 0)
+    : -1
 
   return (
     <div className="flex flex-col h-full bg-canvas">
       {/* Toolbar */}
       <div className="px-6 py-3.5 border-b border-white/[0.06] bg-[#0e1524] flex items-center gap-3 shrink-0">
         <h1 className="text-lg font-bold text-fg flex-1">Dashboard</h1>
+        <button onClick={handleReset} title="Clear manual stat adjustments"
+          className="btn-ghost flex items-center gap-1.5 text-xs py-1.5 text-fg-subtle hover:text-danger">
+          <RotateCcw size={13} /> Reset stats
+        </button>
         <button onClick={load} className="btn-ghost flex items-center gap-1.5 text-xs py-1.5">
           <RefreshCw size={13} /> Refresh
         </button>
+        <button className="btn-ghost flex items-center gap-1.5 py-1.5 text-xs"
+          onClick={() => {
+            const p = bridge.chooseFile('Select backup file', 'json')
+            if (p) {
+              const r = bridge.importData(p)
+              if (r) {
+                const errLine = r.errors?.length ? `\n\nFirst errors:\n${r.errors.slice(0, 5).join('\n')}` : ''
+                alert(`Import complete — ${r.imported} imported, ${r.skipped} skipped.${errLine}`)
+              }
+              load()
+            }
+          }}>
+          <Upload size={13} /> Import JSON
+        </button>
+        <button className="btn-ghost flex items-center gap-1.5 py-1.5 text-xs"
+          onClick={() => { const p = bridge.chooseFolder('Export iCal to folder'); if (p) bridge.exportIcal(p) }}>
+          <CalendarDays size={13} /> Export iCal
+        </button>
         <button className="btn-primary flex items-center gap-1.5 py-1.5 text-xs"
-          onClick={() => { const p = prompt('Export to folder:'); if (p) bridge.exportData(p) }}>
+          onClick={() => { const p = bridge.chooseFolder('Export to folder'); if (p) bridge.exportData(p) }}>
           <Download size={13} /> Export JSON
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-        {/* Stat cards */}
-        <div className="grid grid-cols-5 gap-3">
-          {STAT_DEFS.map(({ key, label, Icon, color }) => (
-            <div key={key} className="card px-4 py-4 relative overflow-hidden animate-fade-in"
-              style={{ borderLeft: `3px solid ${color}` }}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-3xl font-bold text-fg" style={{ textShadow: `0 0 20px ${color}40` }}>
-                    {stats[key as keyof typeof stats] as number}
-                  </p>
-                  <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mt-1">{label}</p>
-                </div>
-                <Icon size={18} style={{ color }} className="opacity-60 mt-0.5" />
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] opacity-30" style={{ background: `linear-gradient(to right, ${color}, transparent)` }} />
+
+        {/* ── Focus time card ────────────────────────────────────────────── */}
+        {stats.focusTimeThisWeek > 0 && (
+          <div className="card px-5 py-4 flex items-center gap-4 border-l-[3px]" style={{ borderLeftColor: '#06b6d4' }}>
+            <Timer size={22} style={{ color: '#06b6d4' }} className="shrink-0 opacity-80" />
+            <div>
+              <p className="text-2xl font-bold text-fg">
+                {Math.floor(stats.focusTimeThisWeek / 60)}h {stats.focusTimeThisWeek % 60}m
+              </p>
+              <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mt-0.5">
+                Focus Time This Week
+              </p>
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* ── Stat cards with manual +/- ────────────────────────────────── */}
+        <div className="grid grid-cols-5 gap-3">
+          {STAT_DEFS.map(({ key, label, Icon, color }) => {
+            const val = stats[key as keyof typeof stats] as number
+            const adj = stats.statAdjustments?.[key] ?? 0
+            return (
+              <div key={key} className="card px-4 py-4 relative overflow-hidden animate-fade-in group"
+                style={{ borderLeft: `3px solid ${color}` }}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-3xl font-bold text-fg" style={{ textShadow: `0 0 20px ${color}40` }}>
+                      {val}
+                    </p>
+                    <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mt-1">{label}</p>
+                    {adj !== 0 && (
+                      <p className="text-[9px] mt-0.5" style={{ color: adj > 0 ? '#10b981' : '#ef4444' }}>
+                        {adj > 0 ? `+${adj}` : adj} manual
+                      </p>
+                    )}
+                  </div>
+                  <Icon size={18} style={{ color }} className="opacity-60 mt-0.5" />
+                </div>
+
+                {/* Manual adjustment buttons — shown on hover */}
+                <div className="absolute bottom-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleAdjust(key, -1)}
+                    className="p-0.5 rounded hover:bg-white/10 text-fg-subtle hover:text-danger transition-colors"
+                    title="Decrease by 1">
+                    <Minus size={10} />
+                  </button>
+                  <button onClick={() => handleAdjust(key, 1)}
+                    className="p-0.5 rounded hover:bg-white/10 text-fg-subtle hover:text-success transition-colors"
+                    title="Increase by 1">
+                    <Plus size={10} />
+                  </button>
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] opacity-30"
+                  style={{ background: `linear-gradient(to right, ${color}, transparent)` }} />
+              </div>
+            )
+          })}
         </div>
 
-        {/* Charts */}
+        {/* ── Charts row ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-5">
-          {/* Weekly bar chart */}
+          {/* Weekly bar */}
           <div className="card p-5">
             <h3 className="text-xs font-bold text-fg-subtle uppercase tracking-wider mb-4 flex items-center gap-2">
               <TrendingUp size={13} className="text-accent" /> Completions This Week
@@ -83,32 +172,34 @@ export default function Dashboard() {
               <BarChart data={barData} barSize={22}>
                 <XAxis dataKey="day" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={tooltipStyle()}
-                  cursor={{ fill: document.documentElement.classList.contains('dark') ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
-                />
+                <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                 <Bar dataKey="completed" radius={[4, 4, 0, 0]}>
-                  {barData.map((_entry, i) => (
+                  {barData.map((_, i) => (
                     <Cell key={i} fill={i === todayIdx ? '#10b981' : '#6366f1'}
-                      style={{ filter: i === todayIdx ? 'drop-shadow(0 0 8px rgba(16,185,129,0.5))' : 'drop-shadow(0 0 4px rgba(99,102,241,0.3))' }} />
+                      style={{ filter: i === todayIdx
+                        ? 'drop-shadow(0 0 8px rgba(16,185,129,0.5))'
+                        : 'drop-shadow(0 0 4px rgba(99,102,241,0.3))' }} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Pie chart */}
+          {/* Category pie */}
           <div className="card p-5">
-            <h3 className="text-xs font-bold text-fg-subtle uppercase tracking-wider mb-4">Tasks by Life Area</h3>
+            <h3 className="text-xs font-bold text-fg-subtle uppercase tracking-wider mb-4">
+              Tasks by Life Area
+            </h3>
             {pieData.length === 0 ? (
               <div className="flex items-center justify-center h-44 text-fg-subtle text-sm">No data yet</div>
             ) : (
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value">
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72}
+                    paddingAngle={3} dataKey="value">
                     {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="none" />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip contentStyle={tooltipStyle()} />
                   <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
                 </PieChart>
               </ResponsiveContainer>
@@ -116,7 +207,54 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Streaks */}
+        {/* ── Monthly overview ────────────────────────────────────────────── */}
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart2 size={13} className="text-accent" />
+            <h3 className="text-xs font-bold text-fg-subtle uppercase tracking-wider flex-1">
+              Monthly Overview — Last 12 Months
+            </h3>
+            <button onClick={() => setShowMonthly(v => !v)}
+              className="text-[10px] text-fg-subtle hover:text-fg transition-colors">
+              {showMonthly ? 'Hide' : 'Show'}
+            </button>
+          </div>
+
+          {showMonthly && (
+            <>
+              {/* Best month badge */}
+              {bestMonthIdx >= 0 && monthly[bestMonthIdx].completed > 0 && (
+                <p className="text-[10px] text-fg-subtle mb-3">
+                  Most productive:&nbsp;
+                  <span className="text-success font-semibold">{monthly[bestMonthIdx].monthName}</span>
+                  &nbsp;— {monthly[bestMonthIdx].completed} tasks completed
+                </p>
+              )}
+
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={monthly} barSize={18}>
+                  <XAxis dataKey="monthName" tick={{ fill: '#6b7280', fontSize: 9 }}
+                    axisLine={false} tickLine={false} interval={0}
+                    tickFormatter={v => v.split(' ')[0]} />
+                  <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false}
+                    tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={tooltipStyle()} formatter={(v) => [v ?? 0, 'Completed']} />
+                  <Bar dataKey="completed" radius={[4, 4, 0, 0]}>
+                    {monthly.map((_, i) => (
+                      <Cell key={i}
+                        fill={i === bestMonthIdx ? '#10b981' : '#6366f1'}
+                        style={{ filter: i === bestMonthIdx
+                          ? 'drop-shadow(0 0 8px rgba(16,185,129,0.5))'
+                          : 'drop-shadow(0 0 4px rgba(99,102,241,0.3))' }} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          )}
+        </div>
+
+        {/* ── Streaks ─────────────────────────────────────────────────────── */}
         {stats.streaks.length > 0 && (
           <div>
             <h3 className="text-xs font-bold text-fg-subtle uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -127,24 +265,33 @@ export default function Dashboard() {
                 const active = s.active
                 return (
                   <div key={s.id} className="card px-5 py-4 w-44 animate-fade-in"
-                    style={{ borderLeft: `3px solid ${active ? '#f59e0b' : '#374151'}`,
-                             boxShadow: active ? '0 4px 24px rgba(245,158,11,0.12)' : undefined }}>
+                    style={{
+                      borderLeft: `3px solid ${active ? '#f59e0b' : '#374151'}`,
+                      boxShadow: active ? '0 4px 24px rgba(245,158,11,0.12)' : undefined,
+                    }}>
                     <div className="flex items-center gap-2 mb-2">
-                      {active ? <Flame size={16} className="text-warning" /> : <Snowflake size={16} className="text-fg-subtle" />}
+                      {active
+                        ? <Flame size={16} className="text-warning" />
+                        : <Snowflake size={16} className="text-fg-subtle" />}
                       <span className="text-xs font-semibold text-fg truncate">{s.title}</span>
                     </div>
-                    <p className="text-2xl font-bold" style={{ color: active ? '#f59e0b' : '#4b5563',
-                      textShadow: active ? '0 0 16px rgba(245,158,11,0.4)' : undefined }}>
+                    <p className="text-2xl font-bold" style={{
+                      color: active ? '#f59e0b' : '#4b5563',
+                      textShadow: active ? '0 0 16px rgba(245,158,11,0.4)' : undefined,
+                    }}>
                       {s.currentStreak}d
                     </p>
                     <p className="text-[10px] text-fg-subtle mt-0.5">Best: {s.longestStreak}d</p>
-                    {s.lastCompletedDate && <p className="text-[10px] text-fg-subtle">Last: {s.lastCompletedDate}</p>}
+                    {s.lastCompletedDate && (
+                      <p className="text-[10px] text-fg-subtle">Last: {s.lastCompletedDate}</p>
+                    )}
                   </div>
                 )
               })}
             </div>
           </div>
         )}
+
       </div>
     </div>
   )

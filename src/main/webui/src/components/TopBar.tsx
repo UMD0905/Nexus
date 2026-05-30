@@ -1,4 +1,5 @@
-import { Bell, Sun, Moon, Minus, Square, X } from 'lucide-react'
+import { useRef } from 'react'
+import { Bell, Sun, Moon, Minus, Square, X, Zap } from 'lucide-react'
 import type { Notification } from '../types'
 import * as bridge from '../bridge'
 
@@ -7,17 +8,42 @@ interface Props {
   onBellClick: () => void
   isDark: boolean
   onToggleTheme: () => void
+  onQuickAdd?: () => void
 }
 
-export default function TopBar({ notifications, onBellClick, isDark, onToggleTheme }: Props) {
+export default function TopBar({ notifications, onBellClick, isDark, onToggleTheme, onQuickAdd }: Props) {
   const unread = notifications.filter(n => !n.read).length
+  const dragging = useRef(false)
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    // Only left button, not on a button/input
+    if (e.button !== 0) return
+    if ((e.target as HTMLElement).closest('button,input,select')) return
+    dragging.current = true
+    bridge.startDrag(e.screenX, e.screenY)
+    e.preventDefault()
+  }
+
+  const handleDragMove = (e: React.MouseEvent) => {
+    if (!dragging.current) return
+    bridge.dragWindow(e.screenX, e.screenY)
+  }
+
+  const handleDragEnd = () => { dragging.current = false }
 
   return (
     <header className="h-11 flex items-center shrink-0 border-b border-white/[0.06] select-none"
       style={{ background: isDark ? '#0a1020' : '#f8fafc' }}>
 
       {/* App name — fills space and acts as drag region */}
-      <div className="flex items-center gap-2.5 px-5 flex-1">
+      <div
+        className="flex items-center gap-2.5 px-5 flex-1 cursor-grab active:cursor-grabbing h-full"
+        onMouseDown={handleDragStart}
+        onMouseMove={handleDragMove}
+        onMouseUp={handleDragEnd}
+        onMouseLeave={handleDragEnd}
+        onDoubleClick={() => bridge.toggleMaximize()}
+      >
         <span className="text-[13px] font-bold text-accent" style={{ textShadow: isDark ? '0 0 16px rgba(99,102,241,0.5)' : 'none' }}>
           Nexus
         </span>
@@ -26,6 +52,14 @@ export default function TopBar({ notifications, onBellClick, isDark, onToggleThe
 
       {/* Right controls */}
       <div className="flex items-center">
+        {/* Quick Add */}
+        {onQuickAdd && (
+          <button onClick={onQuickAdd}
+            className="flex items-center gap-1.5 px-3 h-7 mr-2 rounded-lg bg-accent/20 hover:bg-accent/30 transition-colors text-accent text-xs font-semibold"
+            title="Quick add task (Ctrl+K)">
+            <Zap size={12} /> Quick Add
+          </button>
+        )}
         {/* Bell */}
         <button onClick={onBellClick}
           className="relative w-9 h-9 flex items-center justify-center hover:bg-white/[0.06] transition-colors rounded-lg mx-1">

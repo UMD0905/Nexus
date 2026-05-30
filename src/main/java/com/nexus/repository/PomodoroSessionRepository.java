@@ -40,6 +40,28 @@ public class PomodoroSessionRepository {
             .map(this::recordToSession);
     }
 
+    public java.util.Optional<PomodoroSession> findById(long id) {
+        return dsl.selectFrom(POMODORO_SESSIONS)
+            .where(POMODORO_SESSIONS.ID.eq(id))
+            .fetchOptional()
+            .map(this::recordToSession);
+    }
+
+    /** Total completed session minutes in the current ISO week (Mon–Sun). */
+    public int completedMinutesThisWeek() {
+        java.time.LocalDate monday = java.time.LocalDate.now()
+            .with(java.time.DayOfWeek.MONDAY);
+        LocalDateTime start = monday.atStartOfDay();
+        LocalDateTime end   = monday.plusDays(6).atTime(java.time.LocalTime.MAX);
+        Integer total = dsl.select(
+                org.jooq.impl.DSL.sum(POMODORO_SESSIONS.DURATION_MINUTES))
+            .from(POMODORO_SESSIONS)
+            .where(POMODORO_SESSIONS.COMPLETED.eq(true)
+                .and(POMODORO_SESSIONS.STARTED_AT.between(start, end)))
+            .fetchOne(0, Integer.class);
+        return total != null ? total : 0;
+    }
+
     public PomodoroSession save(PomodoroSession session) {
         var record = dsl.newRecord(POMODORO_SESSIONS);
         record.setTaskId(session.getTaskId());

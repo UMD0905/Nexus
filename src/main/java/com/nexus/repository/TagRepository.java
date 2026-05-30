@@ -4,7 +4,9 @@ import com.nexus.model.Tag;
 import org.jooq.DSLContext;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.nexus.db.Tables.TAGS;
 import static com.nexus.db.Tables.TASK_TAGS;
@@ -38,6 +40,25 @@ public class TagRepository {
                 .name(r.get(TAGS.NAME))
                 .color(r.get(TAGS.COLOR))
                 .build());
+    }
+
+    /** Batch variant — one query for multiple tasks, returns taskId → tags map. */
+    public Map<Long, List<Tag>> findByTaskIds(List<Long> taskIds) {
+        if (taskIds.isEmpty()) return Map.of();
+        return dsl.select(TASK_TAGS.TASK_ID, TAGS.ID, TAGS.NAME, TAGS.COLOR)
+            .from(TAGS)
+            .join(TASK_TAGS).on(TAGS.ID.eq(TASK_TAGS.TAG_ID))
+            .where(TASK_TAGS.TASK_ID.in(taskIds))
+            .fetch()
+            .stream()
+            .collect(Collectors.groupingBy(
+                r -> r.get(TASK_TAGS.TASK_ID),
+                Collectors.mapping(r -> Tag.builder()
+                    .id(r.get(TAGS.ID))
+                    .name(r.get(TAGS.NAME))
+                    .color(r.get(TAGS.COLOR))
+                    .build(),
+                Collectors.toList())));
     }
 
     public Optional<Tag> findById(long id) {

@@ -3,12 +3,14 @@ package com.nexus.service;
 import com.nexus.model.*;
 import com.nexus.model.enums.TaskStatus;
 import com.nexus.repository.*;
+import com.nexus.repository.GoalRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -35,17 +37,29 @@ public class TaskService {
     private final TagRepository          tagRepository;
     private final SubtaskRepository      subtaskRepository;
     private final StreakService          streakService;
+    private final GoalRepository         goalRepository;
+    private final GoalService            goalService;
+    private RecurrenceService            recurrenceService;  // set after construction to avoid cycle
 
     public TaskService(TaskRepository taskRepository,
                        CategoryRepository categoryRepository,
                        TagRepository tagRepository,
                        SubtaskRepository subtaskRepository,
-                       StreakService streakService) {
+                       StreakService streakService,
+                       GoalRepository goalRepository,
+                       GoalService goalService) {
         this.taskRepository      = taskRepository;
         this.categoryRepository  = categoryRepository;
         this.tagRepository       = tagRepository;
         this.subtaskRepository   = subtaskRepository;
         this.streakService       = streakService;
+        this.goalRepository      = goalRepository;
+        this.goalService         = goalService;
+    }
+
+    /** Called by AppContext after RecurrenceService is constructed (avoids circular dependency). */
+    public void setRecurrenceService(RecurrenceService recurrenceService) {
+        this.recurrenceService = recurrenceService;
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -128,8 +142,12 @@ public class TaskService {
         task.setUpdatedAt(LocalDateTime.now());
         Task updated = taskRepository.update(task);
         log.info("Marked task '{}' (id={}) as DONE at {}", task.getTitle(), taskId, task.getCompletedAt());
-        // Update streak if this is a recurring task
         streakService.recordCompletion(updated);
+        goalService.checkAutoComplete(taskId);
+        // AFTER_COMPLETION recurrence: generate the next instance on completion
+        if (recurrenceService != null && updated.getRecurrenceRuleId() != null) {
+            recurrenceService.generateAfterCompletion(updated);
+        }
         return updated;
     }
 
@@ -226,6 +244,7 @@ public class TaskService {
             taskRepository.delete(taskId);
             log.info("Deleted task id={}", taskId);
         }
+        goalRepository.unlinkTaskFromAllGoals(taskId);
     }
 
     // ── Tag management ────────────────────────────────────────────────────────
@@ -258,29 +277,43 @@ public class TaskService {
     }
 
     /**
-     * Bulk-enriches a list with category and tag data using the minimum number
-     * of queries (one per data type, not one per task).
+     * Bulk-enriches a list with category and tag data using three queries total —
+     * one for categories, one for tags, one for multi-category join — regardless
+     * of list size.  Replaces the previous N+1 per-task approach.
      */
     private void enrich(List<Task> tasks) {
         if (tasks.isEmpty()) return;
 
-        // Load all categories once and index by id
         Map<Long, Category> categoryById = categoryRepository.findAll()
             .stream().collect(Collectors.toMap(Category::getId, c -> c));
 
-        // Load tags for each task individually (kept simple for Phase 1)
+        List<Long> taskIds = tasks.stream().map(Task::getId).toList();
+        Map<Long, List<Tag>>  tagsByTaskId   = tagRepository.findByTaskIds(taskIds);
+        Map<Long, List<Long>> catIdsByTaskId = taskRepository.getTaskCategoryIdsBatch(taskIds);
+
         for (Task t : tasks) {
             if (t.getCategoryId() != null) {
                 t.setCategory(categoryById.get(t.getCategoryId()));
             }
-            t.setTags(tagRepository.findByTaskId(t.getId()));
+            t.setTags(tagsByTaskId.getOrDefault(t.getId(), List.of()));
+            t.setCategories(catIdsByTaskId.getOrDefault(t.getId(), List.of()).stream()
+                .map(categoryById::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList()));
         }
     }
 
     private void enrichOne(Task task) {
+        Map<Long, Category> categoryById = categoryRepository.findAll()
+            .stream().collect(Collectors.toMap(Category::getId, c -> c));
         if (task.getCategoryId() != null) {
-            categoryRepository.findById(task.getCategoryId()).ifPresent(task::setCategory);
+            task.setCategory(categoryById.get(task.getCategoryId()));
         }
         task.setTags(tagRepository.findByTaskId(task.getId()));
+        List<Long> catIds = taskRepository.getTaskCategoryIds(task.getId());
+        task.setCategories(catIds.stream()
+            .map(categoryById::get)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList()));
     }
 }

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Calendar as CalIcon } from 'lucide-react'
 
 interface Props {
@@ -23,7 +24,9 @@ export default function DatePicker({ value, onChange, placeholder = 'Pick a date
   const [open, setOpen]           = useState(false)
   const [viewYear, setViewYear]   = useState(() => value ? new Date(value).getFullYear() : new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => value ? new Date(value).getMonth()    : new Date().getMonth())
-  const ref = useRef<HTMLDivElement>(null)
+  const [dropPos, setDropPos]     = useState({ top: 0, left: 0 })
+  const ref     = useRef<HTMLDivElement>(null)
+  const btnRef  = useRef<HTMLButtonElement>(null)
 
   // Sync view when value changes externally
   useEffect(() => {
@@ -38,7 +41,10 @@ export default function DatePicker({ value, onChange, placeholder = 'Pick a date
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (
+        ref.current && !ref.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -89,8 +95,15 @@ export default function DatePicker({ value, onChange, placeholder = 'Pick a date
     <div className="relative" ref={ref}>
       {/* ── Trigger ─────────────────────────────────────────────────────── */}
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect()
+            setDropPos({ top: r.bottom + 4, left: r.left })
+          }
+          setOpen(o => !o)
+        }}
         className="input flex items-center gap-2 text-left"
       >
         <CalIcon size={13} className="text-fg-subtle shrink-0" />
@@ -106,10 +119,11 @@ export default function DatePicker({ value, onChange, placeholder = 'Pick a date
         )}
       </button>
 
-      {/* ── Dropdown ────────────────────────────────────────────────────── */}
-      {open && (
-        <div className="absolute z-50 mt-1 left-0 w-64 bg-surface rounded-xl border border-border
-          shadow-[0_8px_40px_rgba(0,0,0,0.35)] animate-fade-in p-3 select-none">
+      {/* ── Dropdown (portal — escapes overflow:hidden parents) ─────────── */}
+      {open && createPortal(
+        <div ref={ref} className="fixed z-[9999] w-64 bg-surface rounded-xl border border-border
+          shadow-[0_8px_40px_rgba(0,0,0,0.55)] animate-fade-in p-3 select-none dark"
+          style={{ top: dropPos.top, left: dropPos.left }}>
 
           {/* Month nav */}
           <div className="flex items-center justify-between mb-2">
@@ -158,7 +172,8 @@ export default function DatePicker({ value, onChange, placeholder = 'Pick a date
               Today
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

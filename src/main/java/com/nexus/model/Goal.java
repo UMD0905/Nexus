@@ -32,5 +32,8 @@ public class Goal {
     private Category      category;
     @ToString.Exclude
     @Builder.Default
+    private List<Category> categories = new ArrayList<>();  // all assigned life areas
+    @ToString.Exclude
+    @Builder.Default
     private List<Task>    tasks     = new ArrayList<>();
 }

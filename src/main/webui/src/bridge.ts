@@ -4,38 +4,95 @@
  * In dev (browser), mock data is returned.
  */
 
-import type { Task, Category, Goal, TimeBlock, DashboardStats, Notification } from './types'
+import type { Task, Category, Goal, Project, TimeBlock, DashboardStats, MonthlyStats, Notification, Subtask, Tag } from './types'
 
 declare global {
   interface Window {
     nexusBridge?: {
-      minimizeWindow(): void
-      maximizeWindow(): void
-      closeWindow(): void
-      getTasks(filterJson: string): string
-      getArchivedTasks(): string
-      createTask(json: string): string
-      updateTask(json: string): string
-      deleteTask(id: number): void
-      archiveTask(id: number): void
-      restoreTask(id: number): void
-      markDone(id: number): string
-      getCategories(): string
-      createCategory(json: string): string
-      getGoals(): string
-      createGoal(json: string): string
-      updateGoal(json: string): string
-      updateGoalStatus(id: number, status: string): void
-      deleteGoal(id: number): void
-      getDashboardStats(): string
-      getTimeBlocks(date: string): string
-      getTodayBlocks(date: string): string
-      createTimeBlock(json: string): string
-      deleteTimeBlock(id: number): void
-      getNotifications(): string
-      markNotificationRead(id: number): void
-      logPomodoro(): void
-      exportData(path: string): string
+      tasks: {
+        getTasks(filterJson: string): string
+        getArchivedTasks(): string
+        createTask(json: string): string
+        updateTask(json: string): string
+        deleteTask(id: number): void
+        archiveTask(id: number): void
+        restoreTask(id: number): void
+        markDone(id: number): string
+        markInProgress(id: number): void
+        snoozeTask(taskId: number, minutes: number): void
+        getSubtasks(taskId: number): string
+        createSubtask(json: string): string
+        toggleSubtask(subtaskId: number): string
+        deleteSubtask(subtaskId: number): void
+        skipRecurringInstance(taskId: number): void
+        setTaskCategories(taskId: number, categoryIdsJson: string): void
+        setTaskTags(taskId: number, tagIdsJson: string): string
+        reorderSubtasks(taskId: number, orderedIdsJson: string): void
+      }
+      goals: {
+        getGoals(): string
+        createGoal(json: string): string
+        updateGoal(json: string): string
+        updateGoalStatus(id: number, status: string): void
+        deleteGoal(id: number): void
+        setGoalCategories(goalId: number, categoryIdsJson: string): void
+      }
+      dashboard: {
+        getDashboardStats(): string
+        getMonthlyStats(): string
+        adjustStat(key: string, delta: number): void
+        resetStatAdjustments(): void
+        importData(filePath: string): string
+        exportData(path: string): string
+        exportIcal(path: string): string
+        backupNow(): void
+      }
+      planning: {
+        getTimeBlocks(date: string): string
+        getTodayBlocks(date: string): string
+        createTimeBlock(json: string): string
+        deleteTimeBlock(id: number): void
+        getCategories(): string
+        createCategory(json: string): string
+        updateCategory(json: string): string
+        deleteCategory(id: number): void
+        getTags(): string
+        createTag(json: string): string
+        deleteTag(tagId: number): void
+        updateRecurrenceRule(json: string): string
+        logPomodoro(): void
+        startPomodoroSession(taskId: number, minutes: number): string
+        completePomodoroSession(sessionId: number): void
+        abandonPomodoroSession(sessionId: number): void
+        getPomodoroCount(taskId: number): number
+        playAlarm(type: string): void
+      }
+      projects: {
+        getProjects(): string
+        getProjectsByCategory(categoryId: number): string
+        createProject(json: string): string
+        updateProject(json: string): string
+        deleteProject(id: number): void
+        getProjectTaskCount(projectId: number): number
+        getProjectProgress(projectId: number): number
+      }
+      window: {
+        minimizeWindow(): void
+        maximizeWindow(): void
+        closeWindow(): void
+        startDrag(screenX: number, screenY: number): void
+        dragWindow(screenX: number, screenY: number): void
+        toggleMaximize(): void
+        getNotifications(): string
+        markNotificationRead(id: number): void
+        getSettings(): string
+        setSetting(key: string, value: string): void
+        chooseFolder(title: string): string
+        chooseFile(title: string, ext: string): string
+        reorderCategories(orderedIdsJson: string): void
+      }
+      init(jsWindow: unknown): void
+      pushEvent(type: string, payload: unknown): void
     }
     onBridgeEvent?: (eventJson: string) => void
   }
@@ -46,144 +103,348 @@ function call<T>(fn: () => string): T {
   catch { return [] as unknown as T }
 }
 
-const hasBridge = () => !!window.nexusBridge
+const b = () => window.nexusBridge
 
 // ── Window controls ───────────────────────────────────────────────────────
 
-export function minimizeWindow() { if (hasBridge()) window.nexusBridge!.minimizeWindow() }
-export function maximizeWindow() { if (hasBridge()) window.nexusBridge!.maximizeWindow() }
-export function closeWindow()    { if (hasBridge()) window.nexusBridge!.closeWindow()    }
+export function minimizeWindow()  { b()?.window.minimizeWindow()  }
+export function maximizeWindow()  { b()?.window.maximizeWindow()  }
+export function toggleMaximize()  { b()?.window.toggleMaximize()  }
+export function closeWindow()     { b()?.window.closeWindow()     }
+export function startDrag(screenX: number, screenY: number)  { b()?.window.startDrag(screenX, screenY)  }
+export function dragWindow(screenX: number, screenY: number) { b()?.window.dragWindow(screenX, screenY) }
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
 export function getTasks(filter: Record<string, unknown> = {}): Task[] {
-  if (!hasBridge()) return MOCK_TASKS
-  return call(() => window.nexusBridge!.getTasks(JSON.stringify(filter)))
+  if (!b()) return MOCK_TASKS
+  // showDeferred is a client-side-only concept that maps to a different bridge call
+  if (filter.showDeferred) {
+    const { showDeferred: _, ...rest } = filter
+    return call(() => b()!.tasks.getTasks(JSON.stringify({ ...rest, showDeferred: true })))
+  }
+  return call(() => b()!.tasks.getTasks(JSON.stringify(filter)))
 }
 
 export function getArchivedTasks(): Task[] {
-  if (!hasBridge()) return []
-  return call(() => window.nexusBridge!.getArchivedTasks())
+  if (!b()) return []
+  return call(() => b()!.tasks.getArchivedTasks())
 }
 
 export function createTask(data: Partial<Task>): Task | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.createTask(JSON.stringify(data)))
+  if (!b()) return null
+  return call(() => b()!.tasks.createTask(JSON.stringify(data)))
 }
 
 export function updateTask(data: Partial<Task> & { id: number }): Task | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.updateTask(JSON.stringify(data)))
+  if (!b()) return null
+  return call(() => b()!.tasks.updateTask(JSON.stringify(data)))
 }
 
 export function deleteTask(id: number) {
-  if (hasBridge()) window.nexusBridge!.deleteTask(id)
+  b()?.tasks.deleteTask(id)
 }
 
 export function archiveTask(id: number) {
-  if (hasBridge()) window.nexusBridge!.archiveTask(id)
+  b()?.tasks.archiveTask(id)
 }
 
 export function restoreTask(id: number) {
-  if (hasBridge()) window.nexusBridge!.restoreTask(id)
+  b()?.tasks.restoreTask(id)
 }
 
 export function markDone(id: number): Task | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.markDone(id))
+  if (!b()) return null
+  return call(() => b()!.tasks.markDone(id))
+}
+
+export function markInProgress(id: number) {
+  b()?.tasks.markInProgress(id)
+}
+
+export function snoozeTask(taskId: number, minutes: number) {
+  b()?.tasks.snoozeTask(taskId, minutes)
 }
 
 // ── Categories ────────────────────────────────────────────────────────────
 
 export function getCategories(): Category[] {
-  if (!hasBridge()) return MOCK_CATS
-  return call(() => window.nexusBridge!.getCategories())
+  if (!b()) return MOCK_CATS
+  return call(() => b()!.planning.getCategories())
 }
 
 export function createCategory(name: string, color: string): Category | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.createCategory(JSON.stringify({ name, color })))
+  if (!b()) return null
+  return call(() => b()!.planning.createCategory(JSON.stringify({ name, color })))
+}
+
+export function updateCategory(data: { id: number; name?: string; color?: string }): Category | null {
+  if (!b()) return null
+  return call(() => b()!.planning.updateCategory(JSON.stringify(data)))
+}
+
+export function deleteCategory(id: number) {
+  b()?.planning.deleteCategory(id)
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────
+
+export function getProjects(): Project[] {
+  if (!b()) return MOCK_PROJECTS
+  return call(() => b()!.projects.getProjects())
+}
+
+export function getProjectsByCategory(categoryId: number): Project[] {
+  if (!b()) return []
+  return call(() => b()!.projects.getProjectsByCategory(categoryId))
+}
+
+export function createProject(data: Partial<Project>): Project | null {
+  if (!b()) return null
+  return call(() => b()!.projects.createProject(JSON.stringify(data)))
+}
+
+export function updateProject(data: Partial<Project> & { id: number }): Project | null {
+  if (!b()) return null
+  return call(() => b()!.projects.updateProject(JSON.stringify(data)))
+}
+
+export function deleteProject(id: number) {
+  b()?.projects.deleteProject(id)
+}
+
+export function getProjectTaskCount(projectId: number): number {
+  if (!b()) return 0
+  return b()!.projects.getProjectTaskCount(projectId)
+}
+
+export function getProjectProgress(projectId: number): number {
+  if (!b()) return 0
+  return b()!.projects.getProjectProgress(projectId)
 }
 
 // ── Goals ─────────────────────────────────────────────────────────────────
 
 export function getGoals(): Goal[] {
-  if (!hasBridge()) return MOCK_GOALS
-  return call(() => window.nexusBridge!.getGoals())
+  if (!b()) return MOCK_GOALS
+  return call(() => b()!.goals.getGoals())
 }
 
 export function createGoal(data: Partial<Goal>): Goal | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.createGoal(JSON.stringify(data)))
+  if (!b()) return null
+  return call(() => b()!.goals.createGoal(JSON.stringify(data)))
 }
 
 export function updateGoal(data: Partial<Goal> & { id: number }): Goal | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.updateGoal(JSON.stringify(data)))
+  if (!b()) return null
+  return call(() => b()!.goals.updateGoal(JSON.stringify(data)))
 }
 
 export function updateGoalStatus(id: number, status: string) {
-  if (hasBridge()) window.nexusBridge!.updateGoalStatus(id, status)
+  b()?.goals.updateGoalStatus(id, status)
 }
 
 export function deleteGoal(id: number) {
-  if (hasBridge()) window.nexusBridge!.deleteGoal(id)
+  b()?.goals.deleteGoal(id)
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
 export function getDashboardStats(): DashboardStats {
-  if (!hasBridge()) return MOCK_STATS
-  return call(() => window.nexusBridge!.getDashboardStats())
+  if (!b()) return MOCK_STATS
+  return call(() => b()!.dashboard.getDashboardStats())
+}
+
+export function getMonthlyStats(): MonthlyStats[] {
+  if (!b()) return MOCK_MONTHLY
+  return call(() => b()!.dashboard.getMonthlyStats())
+}
+
+export function adjustStat(key: string, delta: number) {
+  b()?.dashboard.adjustStat(key, delta)
+}
+
+export function resetStatAdjustments() {
+  b()?.dashboard.resetStatAdjustments()
 }
 
 // ── Time blocks ───────────────────────────────────────────────────────────
 
 export function getTimeBlocks(date?: string): TimeBlock[] {
-  if (!hasBridge()) return MOCK_BLOCKS
+  if (!b()) return MOCK_BLOCKS
   const d = date ?? new Date().toISOString().split('T')[0]
-  return call(() => window.nexusBridge!.getTimeBlocks(d))
+  return call(() => b()!.planning.getTimeBlocks(d))
 }
 
 export function getTodayBlocks(date: string): TimeBlock[] {
-  if (!hasBridge()) return []
-  return call(() => window.nexusBridge!.getTodayBlocks(date))
+  if (!b()) return []
+  return call(() => b()!.planning.getTodayBlocks(date))
 }
 
 export function createTimeBlock(data: Partial<TimeBlock>): TimeBlock | null {
-  if (!hasBridge()) return null
-  return call(() => window.nexusBridge!.createTimeBlock(JSON.stringify(data)))
+  if (!b()) return null
+  return call(() => b()!.planning.createTimeBlock(JSON.stringify(data)))
 }
 
 export function deleteTimeBlock(id: number) {
-  if (hasBridge()) window.nexusBridge!.deleteTimeBlock(id)
+  b()?.planning.deleteTimeBlock(id)
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────
 
 export function getNotifications(): Notification[] {
-  if (!hasBridge()) return []
-  return call(() => window.nexusBridge!.getNotifications())
+  if (!b()) return []
+  return call(() => b()!.window.getNotifications())
 }
 
 export function markNotificationRead(id: number) {
-  if (hasBridge()) window.nexusBridge!.markNotificationRead(id)
+  b()?.window.markNotificationRead(id)
 }
 
 // ── Pomodoro ──────────────────────────────────────────────────────────────
 
 export function logPomodoro() {
-  if (hasBridge()) window.nexusBridge!.logPomodoro()
+  b()?.planning.logPomodoro()
 }
 
-// ── Export ────────────────────────────────────────────────────────────────
+export function startPomodoroSession(taskId: number, minutes: number): number {
+  if (!b()) return 0
+  const r = call<{ sessionId: number }>(() => b()!.planning.startPomodoroSession(taskId, minutes))
+  return r?.sessionId ?? 0
+}
+
+export function completePomodoroSession(sessionId: number) {
+  b()?.planning.completePomodoroSession(sessionId)
+}
+
+export function abandonPomodoroSession(sessionId: number) {
+  b()?.planning.abandonPomodoroSession(sessionId)
+}
+
+export function getPomodoroCount(taskId: number): number {
+  if (!b()) return 0
+  return b()!.planning.getPomodoroCount(taskId)
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────
 
 export function exportData(path: string): string {
-  if (!hasBridge()) return ''
-  return window.nexusBridge!.exportData(path)
+  if (!b()) return ''
+  return b()!.dashboard.exportData(path)
+}
+
+export function importData(filePath: string): { imported: number; skipped: number; errors: string[] } | null {
+  if (!b()) return null
+  return call(() => b()!.dashboard.importData(filePath))
+}
+
+export function exportIcal(path: string): string {
+  if (!b()) return ''
+  return b()!.dashboard.exportIcal(path)
+}
+
+export function backupNow() {
+  b()?.dashboard.backupNow()
+}
+
+export function chooseFolder(title: string): string | null {
+  if (!b()) return null
+  const r = b()!.window.chooseFolder(title)
+  try { return JSON.parse(r) } catch { return null }
+}
+
+export function chooseFile(title: string, ext: string): string | null {
+  if (!b()) return null
+  const r = b()!.window.chooseFile(title, ext)
+  try { return JSON.parse(r) } catch { return null }
+}
+
+// ── Subtasks ──────────────────────────────────────────────────────────────
+
+export function getSubtasks(taskId: number): Subtask[] {
+  if (!b()) return []
+  return call(() => b()!.tasks.getSubtasks(taskId))
+}
+
+export function createSubtask(data: { taskId: number; title: string }): Subtask | null {
+  if (!b()) return null
+  return call(() => b()!.tasks.createSubtask(JSON.stringify(data)))
+}
+
+export function toggleSubtask(id: number): Subtask | null {
+  if (!b()) return null
+  return call(() => b()!.tasks.toggleSubtask(id))
+}
+
+export function deleteSubtask(id: number) {
+  b()?.tasks.deleteSubtask(id)
+}
+
+export function reorderSubtasks(taskId: number, orderedIds: number[]) {
+  b()?.tasks.reorderSubtasks(taskId, JSON.stringify(orderedIds))
+}
+
+// ── Tags ──────────────────────────────────────────────────────────────────
+
+export function getTags(): Tag[] {
+  if (!b()) return []
+  return call(() => b()!.planning.getTags())
+}
+
+export function createTag(data: { name: string; color: string }): Tag | null {
+  if (!b()) return null
+  return call(() => b()!.planning.createTag(JSON.stringify(data)))
+}
+
+export function setTaskTags(taskId: number, tagIds: number[]): Tag[] {
+  if (!b()) return []
+  return call(() => b()!.tasks.setTaskTags(taskId, JSON.stringify(tagIds)))
+}
+
+export function deleteTag(tagId: number) {
+  b()?.planning.deleteTag(tagId)
+}
+
+// ── Recurring ─────────────────────────────────────────────────────────────
+
+export function skipRecurringInstance(taskId: number) {
+  b()?.tasks.skipRecurringInstance(taskId)
+}
+
+export function setTaskCategories(taskId: number, categoryIds: number[]) {
+  b()?.tasks.setTaskCategories(taskId, JSON.stringify(categoryIds))
+}
+
+export function setGoalCategories(goalId: number, categoryIds: number[]) {
+  b()?.goals.setGoalCategories(goalId, JSON.stringify(categoryIds))
+}
+
+export function updateRecurrenceRule(data: {
+  ruleId: number; type?: string; daysOfWeek?: string; endDate?: string
+  dayOfMonth?: number; monthOfYear?: number; mode?: string
+}): object | null {
+  if (!b()) return null
+  return call(() => b()!.planning.updateRecurrenceRule(JSON.stringify(data)))
+}
+
+export function reorderCategories(orderedIds: number[]) {
+  b()?.window.reorderCategories(JSON.stringify(orderedIds))
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────
+
+export function getSettings(): Record<string, string> {
+  if (!b()) return {}
+  return call(() => b()!.window.getSettings())
+}
+
+export function setSetting(key: string, value: string) {
+  b()?.window.setSetting(key, value)
 }
 
 // ── Mock data (dev mode) ──────────────────────────────────────────────────
+
+const MOCK_PROJECTS: Project[] = []
 
 const MOCK_CATS: Category[] = [
   { id: 1, name: 'Work',      color: '#6366f1', position: 1 },
@@ -194,25 +455,29 @@ const MOCK_CATS: Category[] = [
 const MOCK_TASKS: Task[] = [
   {
     id: 1, title: 'Finish project proposal', description: 'Q3 planning doc',
-    category: MOCK_CATS[0], categoryId: 1, priority: 'HIGH', status: 'IN_PROGRESS',
+    category: MOCK_CATS[0], categoryId: 1, categoryIds: [1], categories: [MOCK_CATS[0]],
+    priority: 'HIGH', status: 'IN_PROGRESS', lifecycle: 'ANYTIME',
     dueDate: new Date().toISOString(), urgent: true, important: true,
     archived: false, tags: [{ id: 1, name: 'work', color: '#6366f1' }],
     estimatedMinutes: 90, createdAt: '', updatedAt: '',
   },
   {
     id: 2, title: 'Morning kickboxing session', description: '',
-    category: MOCK_CATS[1], categoryId: 2, priority: 'MEDIUM', status: 'TODO',
+    category: MOCK_CATS[1], categoryId: 2, categoryIds: [2], categories: [MOCK_CATS[1]],
+    priority: 'MEDIUM', status: 'TODO', lifecycle: 'ANYTIME',
     dueDate: new Date().toISOString(), urgent: false, important: true,
     archived: false, tags: [], estimatedMinutes: 60, createdAt: '', updatedAt: '',
   },
   {
     id: 3, title: 'Review pull requests', description: '',
-    category: MOCK_CATS[0], categoryId: 1, priority: 'CRITICAL', status: 'TODO',
+    category: MOCK_CATS[0], categoryId: 1, categoryIds: [1], categories: [MOCK_CATS[0]],
+    priority: 'CRITICAL', status: 'TODO', lifecycle: 'ANYTIME',
     urgent: true, important: true, archived: false, tags: [], createdAt: '', updatedAt: '',
   },
   {
     id: 4, title: 'Read 30 pages', description: '',
-    category: MOCK_CATS[2], categoryId: 3, priority: 'LOW', status: 'TODO',
+    category: MOCK_CATS[2], categoryId: 3, categoryIds: [3], categories: [MOCK_CATS[2]],
+    priority: 'LOW', status: 'TODO', lifecycle: 'ANYTIME',
     urgent: false, important: false, archived: false, tags: [], createdAt: '', updatedAt: '',
   },
 ]
@@ -220,7 +485,8 @@ const MOCK_TASKS: Task[] = [
 const MOCK_GOALS: Goal[] = [
   {
     id: 1, title: 'Ship Nexus v2.0', description: 'Launch the React UI update',
-    category: MOCK_CATS[0], categoryId: 1, targetDate: '2026-06-30',
+    category: MOCK_CATS[0], categoryId: 1, categoryIds: [1], categories: [MOCK_CATS[0]],
+    targetDate: '2026-06-30',
     status: 'ACTIVE', completed: false, progress: 0.5,
     createdAt: '',
     tasks: [
@@ -230,7 +496,8 @@ const MOCK_GOALS: Goal[] = [
   },
   {
     id: 2, title: 'Get kickboxing blue belt', description: '',
-    category: MOCK_CATS[1], categoryId: 2, targetDate: '2026-12-01',
+    category: MOCK_CATS[1], categoryId: 2, categoryIds: [2], categories: [MOCK_CATS[1]],
+    targetDate: '2026-12-01',
     status: 'ACTIVE', completed: false, progress: 0.25,
     createdAt: '',
     tasks: [{ id: 2, title: 'Morning kickboxing session', status: 'TODO' }],
@@ -245,11 +512,21 @@ const MOCK_BLOCKS: TimeBlock[] = [
 
 const MOCK_STATS: DashboardStats = {
   totalActive: 14, dueToday: 3, completedThisWeek: 8,
-  overdueTasks: 2, pomodoroToday: 4,
+  overdueTasks: 2, pomodoroToday: 4, focusTimeThisWeek: 120,
   weeklyCompletions: [2, 3, 1, 4, 2, 0, 0],
   categoryBreakdown: { Work: 7, Health: 4, Personal: 3 },
   streaks: [
     { id: 1, title: 'Kickboxing', currentStreak: 5, longestStreak: 12, active: true, category: MOCK_CATS[1] },
     { id: 2, title: 'Gym', currentStreak: 3, longestStreak: 8, active: true, category: MOCK_CATS[1] },
   ],
+  statAdjustments: {},
 }
+
+const MOCK_MONTHLY: MonthlyStats[] = Array.from({ length: 12 }, (_, i) => {
+  const d = new Date(); d.setMonth(d.getMonth() - (11 - i))
+  return {
+    yearMonth: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+    monthName: d.toLocaleString('en', { month: 'short' }) + ' ' + d.getFullYear(),
+    completed: Math.floor(Math.random() * 20),
+  }
+})

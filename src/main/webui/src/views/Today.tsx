@@ -1,11 +1,15 @@
-import { useMemo } from 'react'
-import { Clock, CheckCircle2, Calendar, Zap } from 'lucide-react'
-import type { Task, TimeBlock } from '../types'
+import { useState, useMemo } from 'react'
+import { Clock, CheckCircle2, Calendar, Zap, Plus } from 'lucide-react'
+import type { Task, TimeBlock, Category, Goal } from '../types'
 import { PRIORITY_META, STATUS_META } from '../types'
+import TaskDialog from '../components/TaskDialog'
+import * as bridge from '../bridge'
 
 interface Props {
   tasks: Task[]
   timeBlocks: TimeBlock[]
+  categories: Category[]
+  goals: Goal[]
   onRefresh: () => void
 }
 
@@ -16,9 +20,13 @@ function hourLabel(h: number) {
   return h < 12 ? `${h} AM` : `${h - 12} PM`
 }
 
-export default function Today({ tasks, timeBlocks }: Props) {
+function pad2(n: number) { return String(n).padStart(2, '0') }
+
+export default function Today({ tasks, timeBlocks, categories, goals, onRefresh }: Props) {
   const now = new Date()
   const currentHour = now.getHours() + now.getMinutes() / 60
+
+  const [newTaskHour, setNewTaskHour] = useState<number | null>(null)
 
   const todayTasks = useMemo(() =>
     tasks.filter(t => {
@@ -27,11 +35,28 @@ export default function Today({ tasks, timeBlocks }: Props) {
       return d.toDateString() === now.toDateString()
     }), [tasks])
 
-  const doneTasks = todayTasks.filter(t => t.status === 'DONE')
+  const doneTasks    = todayTasks.filter(t => t.status === 'DONE')
   const pendingTasks = todayTasks.filter(t => t.status !== 'DONE')
-  const progress = todayTasks.length ? Math.round((doneTasks.length / todayTasks.length) * 100) : 0
+  const progress     = todayTasks.length ? Math.round((doneTasks.length / todayTasks.length) * 100) : 0
 
   const dateStr = now.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  const handleNewTaskSave = (data: Partial<Task> & { recurrence?: unknown }) => {
+    bridge.createTask(data as Partial<Task>)
+    setNewTaskHour(null)
+    onRefresh()
+  }
+
+  // Pre-fill TaskDialog when clicking an hour cell
+  const prefillForHour = (h: number): Partial<Task> => {
+    const dateISO = now.toISOString().split('T')[0]
+    return {
+      dueDate:   `${dateISO}T${pad2(h)}:00:00`,
+      startTime: `${pad2(h)}:00`,
+      status:    'TODO',
+      priority:  'MEDIUM',
+    }
+  }
 
   return (
     <div className="flex flex-col h-full bg-canvas">
@@ -73,7 +98,10 @@ export default function Today({ tasks, timeBlocks }: Props) {
                   </div>
 
                   {/* Grid column */}
-                  <div className="flex-1 border-t border-white/[0.05] relative pt-0.5 pb-3">
+                  <div
+                    className="flex-1 border-t border-white/[0.05] relative pt-0.5 pb-3 cursor-pointer"
+                    onClick={() => setNewTaskHour(h)}
+                  >
                     {/* Current time indicator */}
                     {pct !== null && (
                       <div
@@ -89,6 +117,7 @@ export default function Today({ tasks, timeBlocks }: Props) {
                     {blocksInHour.map(b => (
                       <div key={b.id}
                         className="mb-1.5 px-3 py-2 rounded-lg text-xs font-medium animate-fade-in"
+                        onClick={e => e.stopPropagation()}
                         style={{
                           background: (b.color ?? '#6366f1') + '22',
                           borderLeft: `3px solid ${b.color ?? '#6366f1'}`,
@@ -99,10 +128,15 @@ export default function Today({ tasks, timeBlocks }: Props) {
                       </div>
                     ))}
 
-                    {/* Empty state pulse */}
-                    {blocksInHour.length === 0 && isCurrentHour && (
-                      <div className="h-8 rounded-lg border border-dashed border-accent/20 flex items-center px-3">
-                        <span className="text-[10px] text-accent/50">Now</span>
+                    {/* Hover hint */}
+                    {blocksInHour.length === 0 && (
+                      <div className="h-8 rounded-lg border border-dashed border-white/[0.05] group-hover:border-accent/20 flex items-center px-3 transition-colors">
+                        {isCurrentHour
+                          ? <span className="text-[10px] text-accent/50">Now</span>
+                          : <span className="text-[10px] text-fg-subtle/0 group-hover:text-fg-subtle/40 transition-colors flex items-center gap-1">
+                              <Plus size={9} /> New task
+                            </span>
+                        }
                       </div>
                     )}
                   </div>
@@ -168,6 +202,17 @@ export default function Today({ tasks, timeBlocks }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Task dialog — opened by clicking an hour cell */}
+      {newTaskHour !== null && (
+        <TaskDialog
+          task={prefillForHour(newTaskHour)}
+          categories={categories}
+          goals={goals}
+          onSave={handleNewTaskSave}
+          onClose={() => setNewTaskHour(null)}
+        />
+      )}
     </div>
   )
 }

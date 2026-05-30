@@ -96,6 +96,14 @@ public class GoalService {
         });
     }
 
+    public void reactivateGoal(long goalId) {
+        goalRepo.findById(goalId).ifPresent(goal -> {
+            goal.setStatus("ACTIVE");
+            goalRepo.update(goal);
+            log.info("Reactivated goal '{}' id={}", goal.getTitle(), goalId);
+        });
+    }
+
     public void deleteGoal(long goalId) {
         goalRepo.delete(goalId);
         log.info("Deleted goal id={}", goalId);
@@ -122,12 +130,51 @@ public class GoalService {
         }
     }
 
+    /**
+     * Called after a task is marked done.  If every eligible linked task for any
+     * goal containing this task is now DONE, auto-completes that goal.
+     *
+     * <p>Eligible = not a soft-deleted recurring instance (CANCELLED + archived).
+     */
+    public void checkAutoComplete(long taskId) {
+        goalRepo.findGoalIdByTaskId(taskId).ifPresent(goalId ->
+            goalRepo.findById(goalId).ifPresent(goal -> {
+                if (!"ACTIVE".equals(goal.getStatus())) return;
+                List<Long> linkedIds = goalRepo.findLinkedTaskIds(goalId);
+                if (linkedIds.isEmpty()) return;
+
+                boolean allDone = linkedIds.stream()
+                    .map(taskRepo::findById)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    // Skip soft-deleted recurring instances — they are tombstones, not real tasks.
+                    .filter(t -> !(t.getRecurrenceRuleId() != null
+                                   && t.getStatus() == TaskStatus.CANCELLED
+                                   && t.isArchived()))
+                    .allMatch(t -> t.getStatus() == TaskStatus.DONE);
+
+                if (allDone) {
+                    goal.setStatus("COMPLETED");
+                    goalRepo.update(goal);
+                    log.info("Auto-completed goal '{}' (id={}) — all linked tasks done",
+                        goal.getTitle(), goalId);
+                }
+            }));
+    }
+
     // ── Private ───────────────────────────────────────────────────────────────
 
     private void enrich(Goal goal) {
         if (goal.getCategoryId() != null) {
             categoryRepo.findById(goal.getCategoryId()).ifPresent(goal::setCategory);
         }
+        List<Long> catIds = goalRepo.getGoalCategoryIds(goal.getId());
+        List<com.nexus.model.Category> cats = catIds.stream()
+            .map(id -> categoryRepo.findById(id).orElse(null))
+            .filter(java.util.Objects::nonNull)
+            .toList();
+        goal.setCategories(cats);
+
         List<Long> taskIds = goalRepo.findLinkedTaskIds(goal.getId());
         List<Task> tasks = taskIds.stream()
             .map(taskRepo::findById)

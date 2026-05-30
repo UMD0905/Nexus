@@ -3,7 +3,9 @@ package com.nexus.model.enums;
 public enum RecurrenceType {
     DAILY("Daily"),
     WEEKLY("Weekly"),
-    WEEKDAYS("Weekdays (Mon–Fri)");
+    WEEKDAYS("Weekdays (Mon–Fri)"),
+    MONTHLY("Monthly"),
+    YEARLY("Yearly");
 
     private final String displayName;
 
