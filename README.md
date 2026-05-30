@@ -1,26 +1,61 @@
 # Nexus — Personal Productivity Hub
 
-A modern, polished desktop productivity app for people juggling a full-time
-job, side projects, and an active lifestyle (kickboxing, gym, etc.).
+A modern desktop productivity app for people juggling a full-time job, side
+projects, and an active lifestyle. Built with a Java 21 backend and a React 19
+frontend embedded in a JavaFX WebView.
 
 ---
 
 ## Tech Stack
 
+### Backend
+
 | Layer | Library |
 |---|---|
-| UI | JavaFX 21 + AtlantaFX 2 (PrimerDark / PrimerLight) |
-| Icons | Ikonli + Material Design 2 pack |
-| Extra controls | ControlsFX 11 |
-| Build | Maven 3.9+ |
-| Database | H2 (embedded file, `~/.nexus/data/nexus.mv.db`) |
+| Desktop shell | JavaFX 21.0.5 (undecorated window + WebView) |
+| Database | H2 2.2 (embedded file, `~/.nexus/data/nexus.mv.db`) |
 | SQL | JOOQ 3.19 (type-safe, code-generated) |
 | Migrations | Flyway 10 |
 | Connection pool | HikariCP 5 |
-| Utility | Lombok, Jackson 2.17 |
+| Serialization | Jackson 2.17 + JavaTimeModule |
+| Utility | Lombok |
 | Logging | SLF4J 2 + Logback 1.5 |
-| Charts (Phase 3) | JFreeChart 1.5 |
-| Testing | JUnit 5, Mockito 5, TestFX 4 |
+| Testing | JUnit 5, Mockito 5 |
+
+### Frontend
+
+| Layer | Library |
+|---|---|
+| Framework | React 19 + TypeScript |
+| Bundler | Vite 8 |
+| Styling | Tailwind CSS 3 |
+| Charts | Recharts 3 |
+| Drag & drop | @dnd-kit/core + @dnd-kit/sortable |
+| Icons | lucide-react |
+| Date parsing | date-fns 4, chrono-node 2 |
+| Markdown | react-markdown 9 + remark-gfm + rehype-sanitize |
+
+---
+
+## Architecture
+
+```
+JavaFX Application
+└── Stage (undecorated, 1280×800)
+    └── WebView (Chromium-based)
+        └── React SPA
+            └── window.nexusBridge  ←→  NexusBridge.java
+                                         ├── TaskBridge
+                                         ├── GoalBridge
+                                         ├── DashboardBridge
+                                         ├── PlanningBridge
+                                         ├── ProjectBridge
+                                         └── WindowBridge
+```
+
+The React frontend communicates with the Java backend through a typed
+bidirectional bridge. Java pushes events to React via `window.onBridgeEvent()`;
+React calls Java via `window.nexusBridge.*` methods (all pass/return JSON).
 
 ---
 
@@ -28,7 +63,8 @@ job, side projects, and an active lifestyle (kickboxing, gym, etc.).
 
 - **Java 21** (LTS) — [download](https://adoptium.net)
 - **Maven 3.9+** — bundled with IntelliJ or [download](https://maven.apache.org)
-- Internet access on first build (to download dependencies from Maven Central)
+- **Node 20+** — only needed if you modify the frontend
+- Internet access on first build (Maven Central + npm registry)
 
 ---
 
@@ -36,19 +72,16 @@ job, side projects, and an active lifestyle (kickboxing, gym, etc.).
 
 ### 1. Generate JOOQ sources (required before compiling)
 
-JOOQ generates type-safe Java from the database schema.
-This step runs Flyway against a throw-away H2 file in `target/`, then
-JOOQ reads the schema and emits Java classes.
-
 ```bash
 mvn generate-sources
 ```
 
+JOOQ runs Flyway against a throw-away H2 file in `target/`, reads the schema,
+and emits type-safe Java classes.
+
 ### 2. (IntelliJ only) Mark generated sources
 
 Right-click `target/generated-sources/jooq` → **Mark Directory as → Sources Root**
-
-Now all red `com.nexus.db.*` errors disappear.
 
 ---
 
@@ -60,8 +93,9 @@ mvn javafx:run
 
 On first launch Nexus will:
 1. Create `~/.nexus/data/` and `~/.nexus/logs/`
-2. Run Flyway migrations to set up the production database
-3. Seed five life areas (Work, Side Projects, Kickboxing, Gym, Personal) plus sample tasks
+2. Apply all Flyway migrations (V1–V13) to set up the production database
+3. Seed life-area categories and sample tasks
+4. Open a single-instance-locked window (port 47291 lock prevents duplicates)
 
 ---
 
@@ -71,7 +105,16 @@ On first launch Nexus will:
 mvn test
 ```
 
-Tests use Mockito mocks for the repository layer — no database required.
+---
+
+## Building the Frontend (dev)
+
+```bash
+cd src/main/webui
+npm install
+npm run dev       # hot-reload dev server
+npm run build     # build to src/main/resources/webui/
+```
 
 ---
 
@@ -79,28 +122,91 @@ Tests use Mockito mocks for the repository layer — no database required.
 
 ```
 src/main/java/com/nexus/
-├── Main.java               ← entry point (plain launcher)
-├── NexusApp.java           ← JavaFX Application
+├── NexusApp.java               ← JavaFX Application (window, tray, lifecycle)
 ├── config/
-│   ├── AppContext.java     ← manual DI container
-│   ├── DatabaseConfig.java ← HikariCP + Flyway
-│   └── JooqConfig.java     ← DSLContext factory
-├── model/                  ← domain objects + enums
-├── repository/             ← JOOQ-backed data access
-├── service/                ← business logic
-├── viewmodel/              ← JavaFX observable state (MVVM)
+│   ├── AppContext.java         ← manual DI container
+│   ├── DatabaseConfig.java     ← HikariCP + Flyway
+│   └── JooqConfig.java
+├── model/                      ← domain objects + enums
+│   ├── Task, Subtask, Goal, Project, Category, Tag
+│   ├── RecurrenceRule, TimeBlock, PomodoroSession, Streak
+│   └── enums/  (Priority, TaskStatus, RecurrenceType, …)
+├── repository/                 ← JOOQ-backed data access
+├── service/
+│   ├── TaskService             ← CRUD, filtering, status transitions
+│   ├── GoalService             ← progress tracking
+│   ├── RecurrenceService       ← recurring task generation & skipping
+│   ├── ReminderService         ← reminder scheduling
+│   ├── StreakService           ← streak calculation
+│   ├── PomodoroService         ← session management
+│   ├── TimeBlockService        ← calendar time blocks
+│   ├── BackupService           ← backup/restore
+│   ├── ICalExportService       ← iCalendar export
+│   ├── ExportService           ← CSV/JSON export
+│   ├── SettingsService         ← user preferences
+│   └── SystemTrayService       ← Windows system tray
 └── ui/
-    ├── MainWindow.java
-    ├── components/         ← Sidebar, TaskCard
-    └── views/              ← TaskListView, TaskDetailPanel
+    ├── NexusBridge.java        ← top-level bridge (composes sub-bridges)
+    ├── MainWindow.java         ← JavaFX root + WebView wiring
+    └── bridge/
+        ├── TaskBridge.java
+        ├── GoalBridge.java
+        ├── DashboardBridge.java
+        ├── PlanningBridge.java
+        ├── ProjectBridge.java
+        ├── WindowBridge.java
+        └── *Input.java / BridgeDtos.java  ← JSON DTOs
+
+src/main/webui/src/
+├── App.tsx                     ← root component + view router
+├── bridge.ts                   ← TypeScript types for window.nexusBridge
+├── types.ts                    ← shared domain types
+├── components/
+│   ├── Sidebar, TopBar         ← navigation & window chrome
+│   ├── QuickAdd                ← rapid task capture (keyboard shortcut)
+│   ├── SearchPalette           ← command palette
+│   ├── TaskDialog              ← full task editor
+│   ├── SubtaskList, TagPicker, DatePicker
+│   └── ToastStack, useToast    ← notification toasts
+└── views/
+    ├── Dashboard               ← stats, charts, quick actions
+    ├── Today, Week             ← time-focused views
+    ├── Inbox                   ← quick capture
+    ├── Scheduled, Anytime, Someday  ← GTD-style buckets
+    ├── TaskList                ← master filtered list
+    ├── Projects                ← project-grouped tasks
+    ├── Kanban                  ← status-based board
+    ├── Calendar                ← calendar with tasks
+    ├── Goals                   ← goal tracking & progress
+    ├── Pomodoro                ← timer + session history
+    ├── Eisenhower              ← urgency/importance matrix
+    ├── Review                  ← weekly review
+    └── Settings                ← preferences, backup, export
 
 src/main/resources/
-├── db/migration/           ← Flyway SQL scripts
-├── css/nexus.css           ← AtlantaFX overrides
-└── logback.xml
-
-target/generated-sources/jooq/com/nexus/db/   ← JOOQ generated (git-ignored)
+├── db/migration/               ← Flyway SQL (V1–V13)
+└── webui/                      ← compiled React bundle (committed)
 ```
+
+---
+
+## Database Migrations
+
+| Version | Contents |
+|---|---|
+| V1 | Initial schema |
+| V2 | Seed data |
+| V3 | Indexes |
+| V4 | Category additions |
+| V5 | Streak tracking |
+| V6 | Schema enhancements |
+| V7 | Subtasks, tags, projects, import |
+| V8 | Multi-category support |
+| V9 | Settings persistence |
+| V10 | Recurrence system v2 |
+| V11 | Task snooze |
+| V12 | Defer / lifecycle / recurrence modes |
+| V13 | Task templates + energy log |
 
 ---
 
@@ -109,41 +215,24 @@ target/generated-sources/jooq/com/nexus/db/   ← JOOQ generated (git-ignored)
 | File | Purpose |
 |---|---|
 | `~/.nexus/data/nexus.mv.db` | Production H2 database |
+| `~/.nexus/data/window-state.json` | Saved window position/size |
 | `~/.nexus/logs/nexus.log` | Rolling log (7-day history) |
 
 ---
 
-## Keyboard Shortcuts (Phase 1)
+## Keyboard Shortcuts
 
 | Key | Action |
 |---|---|
-| `Ctrl+N` | New task |
-| `Ctrl+F` | Focus search |
-| `Ctrl+D` | Mark selected task as done |
-| `Delete` | Archive selected task |
+| `Ctrl+N` | Quick-add task |
+| `Ctrl+K` | Open search palette |
+| `Ctrl+D` | Mark selected task done |
 
 ---
 
-## Build Pipeline Explained
+## CI
 
-```
-mvn javafx:run
-  └─ generate-sources
-       ├─ flyway:migrate  → target/jooq-gen/nexusdb  (schema only, build-time)
-       └─ jooq:generate   → target/generated-sources/jooq  (Java classes)
-  └─ compile  → compiles your code + JOOQ generated code
-  └─ javafx:run  → launches com.nexus.Main
-```
+GitHub Actions runs two jobs on every push/PR to `master`:
 
-At runtime Flyway runs again (fast, idempotent) against the real production
-database in `~/.nexus/data/`, applying any new migrations automatically.
-
----
-
-## Phase Roadmap
-
-| Phase | Status | Features |
-|---|---|---|
-| **1 – Foundation** | ✅ Current | Tasks, projects, categories, CRUD, search/filter, archive |
-| **2 – Time Control** | Planned | Today view, Week view, recurring tasks, Pomodoro timer, time blocks, reminders |
-| **3 – Insight** | Planned | Goals, streaks, dashboard charts, JSON backup/export |
+- **java** — `mvn verify` under Xvfb on Ubuntu (Java 21 Temurin)
+- **frontend** — `npm ci && lint && tsc --noEmit && npm run build` (Node 20)
