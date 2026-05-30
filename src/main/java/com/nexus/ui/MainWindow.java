@@ -39,6 +39,7 @@ public class MainWindow extends StackPane {
 
     private final AppContext  ctx;
     private final NexusBridge bridge;
+    private WebView webView;
 
     public MainWindow(AppContext ctx, NexusBridge bridge) {
         this.ctx    = ctx;
@@ -46,10 +47,15 @@ public class MainWindow extends StackPane {
         build();
     }
 
+    /** Call this to give the embedded browser keyboard focus. */
+    public void focusWebView() {
+        if (webView != null) webView.requestFocus();
+    }
+
     private void build() {
         setBackground(new Background(new BackgroundFill(Color.web("#090d18"), null, null)));
 
-        WebView webView = new WebView();
+        webView = new WebView();
         WebEngine engine = webView.getEngine();
 
         webView.setStyle("-fx-background-color: #090d18;");
@@ -84,6 +90,9 @@ public class MainWindow extends StackPane {
                     bridge.pushEvent("NOTIFICATION", null));
 
                 log.info("React app loaded — bridge injected");
+                // Give the WebView keyboard focus once the page is ready.
+                // Without this, no keyboard events reach the React app.
+                Platform.runLater(webView::requestFocus);
             }
         });
 
@@ -104,6 +113,10 @@ public class MainWindow extends StackPane {
         }
 
         getChildren().add(webView);
+
+        // Re-focus the WebView whenever the user clicks inside the window.
+        // This recovers focus if it was lost to a JavaFX dialog or OS event.
+        webView.setOnMouseClicked(e -> webView.requestFocus());
     }
 
     /**

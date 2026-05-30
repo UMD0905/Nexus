@@ -56,7 +56,7 @@ export default function TopBar({ notifications, onBellClick, isDark, onToggleThe
         {onQuickAdd && (
           <button onClick={onQuickAdd}
             className="flex items-center gap-1.5 px-3 h-7 mr-2 rounded-lg bg-accent/20 hover:bg-accent/30 transition-colors text-accent text-xs font-semibold"
-            title="Quick add task (Ctrl+K)">
+            title="Quick add task (Ctrl+N)">
             <Zap size={12} /> Quick Add
           </button>
         )}

@@ -9,6 +9,8 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.paint.Color;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -62,6 +64,24 @@ public class NexusApp extends Application {
         restoreWindowState(stage);
 
         stage.show();
+
+        // Give the WebView initial keyboard focus.
+        Platform.runLater(mainWindow::focusWebView);
+
+        // Restore WebView focus whenever the window comes back to the foreground
+        // (e.g. after Alt+Tab, after closing a JavaFX dialog, etc.).
+        stage.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (isFocused) Platform.runLater(mainWindow::focusWebView);
+        });
+
+        // Intercept Ctrl+N at the JavaFX scene level — WebKit may consume it
+        // before JavaScript sees it (browser "new window" shortcut).
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() && event.getCode() == KeyCode.N) {
+                bridge.pushEvent("QUICK_ADD_OPEN", null);
+                event.consume();
+            }
+        });
 
         // Install system tray
         // quickAddAction triggers the Quick Add modal — we push a bridge event

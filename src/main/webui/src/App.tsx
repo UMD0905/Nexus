@@ -212,11 +212,12 @@ export default function App() {
     }
   }, [])
 
-  // Ctrl+K → Quick Add  |  Ctrl+Shift+F → Search palette
+  // Ctrl+N → Quick Add (also handled at JavaFX level for WebKit compatibility)
+  // Ctrl+K → Search palette
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'k') { e.preventDefault(); setShowQuickAdd(true) }
-      if (e.ctrlKey && e.shiftKey && e.key === 'F') { e.preventDefault(); setShowSearch(true) }
+      if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); setShowQuickAdd(true) }
+      if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setShowSearch(true) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
