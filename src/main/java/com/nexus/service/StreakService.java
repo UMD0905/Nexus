@@ -58,6 +58,37 @@ public class StreakService {
         return streaks;
     }
 
+    // ── Mutations ─────────────────────────────────────────────────────────────
+
+    /**
+     * Updates a streak's editable fields (title, categoryId, currentStreak, longestStreak).
+     * Resets {@code lastCompletedDate} to null when currentStreak is set to 0.
+     */
+    public Streak updateStreak(Streak patch) {
+        if (patch.getId() == null) throw new IllegalArgumentException("Cannot update streak without id");
+        if (patch.getTitle() == null || patch.getTitle().isBlank())
+            throw new IllegalArgumentException("Streak title must not be blank");
+
+        Streak existing = streakRepo.findById(patch.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Streak not found: " + patch.getId()));
+
+        existing.setTitle(patch.getTitle());
+        existing.setCategoryId(patch.getCategoryId());
+        existing.setCurrentStreak(Math.max(0, patch.getCurrentStreak()));
+        existing.setLongestStreak(Math.max(existing.getLongestStreak(), existing.getCurrentStreak()));
+        if (existing.getCurrentStreak() == 0) existing.setLastCompletedDate(null);
+
+        streakRepo.update(existing);
+        log.info("Updated streak id={} title='{}' current={}", existing.getId(), existing.getTitle(), existing.getCurrentStreak());
+        return existing;
+    }
+
+    /** Permanently deletes a streak row. */
+    public void deleteStreak(long id) {
+        streakRepo.delete(id);
+        log.info("Deleted streak id={}", id);
+    }
+
     // ── Update logic ──────────────────────────────────────────────────────────
 
     /**

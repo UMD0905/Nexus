@@ -3,9 +3,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import {
   Download, Upload, RefreshCw, Flame, Snowflake, TrendingUp, Calendar,
   CheckCircle2, AlertTriangle, Timer, Activity, Plus, Minus,
-  RotateCcw, BarChart2, CalendarDays,
+  RotateCcw, BarChart2, CalendarDays, Edit2, Trash2, X,
 } from 'lucide-react'
-import type { DashboardStats, MonthlyStats } from '../types'
+import type { DashboardStats, MonthlyStats, Streak, Category } from '../types'
 import * as bridge from '../bridge'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -27,14 +27,106 @@ function tooltipStyle() {
   }
 }
 
+function StreakEditDialog({ streak, categories, onSave, onClose }: {
+  streak: Streak
+  categories: Category[]
+  onSave: (data: Partial<Streak> & { id: number }) => void
+  onClose: () => void
+}) {
+  const [title, setTitle]               = useState(streak.title)
+  const [categoryId, setCategoryId]     = useState<number | ''>(streak.categoryId ?? '')
+  const [currentStreak, setCurrentStreak] = useState(streak.currentStreak)
+  const [longestStreak, setLongestStreak] = useState(streak.longestStreak)
+
+  const handleSave = () => {
+    if (!title.trim()) return
+    onSave({
+      id: streak.id,
+      title: title.trim(),
+      categoryId: categoryId === '' ? undefined : categoryId,
+      currentStreak,
+      longestStreak: Math.max(longestStreak, currentStreak),
+    })
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      <div className="w-80 bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-fg flex items-center gap-2">
+            <Flame size={14} className="text-warning" /> Edit Streak
+          </h2>
+          <button onClick={onClose} className="text-fg-subtle hover:text-fg transition-colors">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="form-label">Title</label>
+            <input
+              className="input"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+            />
+          </div>
+
+          {categories.length > 0 && (
+            <div>
+              <label className="form-label">Life Area</label>
+              <select className="input" value={categoryId}
+                onChange={e => setCategoryId(e.target.value ? Number(e.target.value) : '')}>
+                <option value="">None</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="form-label">Current streak</label>
+              <input type="number" min={0} className="input text-right"
+                value={currentStreak} onChange={e => setCurrentStreak(Math.max(0, Number(e.target.value)))} />
+            </div>
+            <div>
+              <label className="form-label">Best streak</label>
+              <input type="number" min={0} className="input text-right"
+                value={longestStreak} onChange={e => setLongestStreak(Math.max(0, Number(e.target.value)))} />
+            </div>
+          </div>
+
+          <p className="text-[10px] text-fg-subtle">
+            Setting current to 0 will reset the streak's active state.
+          </p>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <button className="btn-ghost text-sm" onClick={onClose}>Cancel</button>
+          <button className="btn-primary text-sm" onClick={handleSave}
+            disabled={!title.trim()}>Save</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [stats, setStats]           = useState<DashboardStats | null>(null)
   const [monthly, setMonthly]       = useState<MonthlyStats[]>([])
   const [showMonthly, setShowMonthly] = useState(true)
+  const [editStreak, setEditStreak] = useState<Streak | null>(null)
+
+  // categories aren't in DashboardStats — pull them from bridge directly
+  const [categories, setCategories] = useState<Category[]>([])
 
   const load = () => {
     setStats(bridge.getDashboardStats())
     setMonthly(bridge.getMonthlyStats())
+    setCategories(bridge.getCategories())
   }
 
   useEffect(() => { load() }, [])
@@ -65,6 +157,7 @@ export default function Dashboard() {
     : -1
 
   return (
+    <>
     <div className="flex flex-col h-full bg-canvas">
       {/* Toolbar */}
       <div className="px-6 py-3.5 border-b border-white/[0.06] bg-[#0e1524] flex items-center gap-3 shrink-0">
@@ -264,16 +357,41 @@ export default function Dashboard() {
               {stats.streaks.map(s => {
                 const active = s.active
                 return (
-                  <div key={s.id} className="card px-5 py-4 w-44 animate-fade-in"
+                  <div key={s.id}
+                    className="card px-5 py-4 w-44 animate-fade-in relative group"
                     style={{
                       borderLeft: `3px solid ${active ? '#f59e0b' : '#374151'}`,
                       boxShadow: active ? '0 4px 24px rgba(245,158,11,0.12)' : undefined,
                     }}>
+
+                    {/* Edit / Delete — appear on hover */}
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => setEditStreak(s)}
+                        title="Edit streak"
+                        className="p-1 rounded-md hover:bg-white/[0.08] text-fg-subtle hover:text-fg transition-all"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete streak "${s.title}"? This cannot be undone.`)) {
+                            bridge.deleteStreak(s.id)
+                            load()
+                          }
+                        }}
+                        title="Delete streak"
+                        className="p-1 rounded-md hover:bg-white/[0.08] text-fg-subtle hover:text-danger transition-all"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+
                     <div className="flex items-center gap-2 mb-2">
                       {active
                         ? <Flame size={16} className="text-warning" />
                         : <Snowflake size={16} className="text-fg-subtle" />}
-                      <span className="text-xs font-semibold text-fg truncate">{s.title}</span>
+                      <span className="text-xs font-semibold text-fg truncate pr-8">{s.title}</span>
                     </div>
                     <p className="text-2xl font-bold" style={{
                       color: active ? '#f59e0b' : '#4b5563',
@@ -285,6 +403,11 @@ export default function Dashboard() {
                     {s.lastCompletedDate && (
                       <p className="text-[10px] text-fg-subtle">Last: {s.lastCompletedDate}</p>
                     )}
+                    {s.category && (
+                      <p className="text-[10px] mt-1 truncate" style={{ color: s.category.color }}>
+                        {s.category.name}
+                      </p>
+                    )}
                   </div>
                 )
               })}
@@ -294,5 +417,15 @@ export default function Dashboard() {
 
       </div>
     </div>
+
+    {editStreak && (
+      <StreakEditDialog
+        streak={editStreak}
+        categories={categories}
+        onSave={data => { bridge.updateStreak(data); load() }}
+        onClose={() => setEditStreak(null)}
+      />
+    )}
+    </>
   )
 }

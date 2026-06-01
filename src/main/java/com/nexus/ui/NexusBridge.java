@@ -40,7 +40,7 @@ public class NexusBridge {
     public final GoalBridge      goals;
     public final DashboardBridge dashboard;
     public final PlanningBridge  planning;
-    public final WindowBridge    window;
+    public final WindowBridge    win;      // NOT "window" — that name is shadowed by the DOM global
     public final ProjectBridge   projects;
 
     /** JS window handle — kept alive by the WebView engine. */
@@ -56,7 +56,7 @@ public class NexusBridge {
         this.goals     = new GoalBridge(ctx);
         this.dashboard = new DashboardBridge(ctx);
         this.planning  = new PlanningBridge(ctx);
-        this.window    = new WindowBridge(ctx, stage);
+        this.win       = new WindowBridge(ctx, stage);
         this.projects  = new ProjectBridge(ctx);
     }
 
@@ -65,6 +65,18 @@ public class NexusBridge {
         this.jsWindow = jsWindow;
         log.info("NexusBridge initialised — JS window handle acquired");
     }
+
+    // ── Window control proxies ────────────────────────────────────────────────
+    // These are duplicated here so JavaScript can call them directly on the
+    // top-level nexusBridge object without needing to traverse a sub-bridge
+    // field (JSObject field access is unreliable in JavaFX WebKit).
+
+    public void minimizeWindow()                        { win.minimizeWindow(); }
+    public void maximizeWindow()                        { win.maximizeWindow(); }
+    public void toggleMaximize()                        { win.toggleMaximize(); }
+    public void closeWindow()                           { win.closeWindow();    }
+    public void startDrag(double screenX, double screenY) { win.startDrag(screenX, screenY); }
+    public void dragWindow(double screenX, double screenY) { win.dragWindow(screenX, screenY); }
 
     // ── Push event to JS ──────────────────────────────────────────────────────
 

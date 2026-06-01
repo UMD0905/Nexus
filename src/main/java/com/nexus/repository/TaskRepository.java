@@ -124,6 +124,22 @@ public class TaskRepository {
             .map(this::recordToTask);
     }
 
+    /**
+     * Returns only the tasks that could ever trigger a reminder:
+     * non-archived, not done/cancelled, with both DUE_DATE and REMINDER_MINUTES_BEFORE set.
+     * Used by ReminderService to avoid loading the full task table every minute.
+     */
+    public List<Task> findWithActiveReminders() {
+        return dsl.selectFrom(TASKS)
+            .where(TASKS.IS_ARCHIVED.eq(false)
+                .and(TASKS.PARENT_TASK_ID.isNull())
+                .and(TASKS.DUE_DATE.isNotNull())
+                .and(DSL.field("REMINDER_MINUTES_BEFORE").isNotNull())
+                .and(TASKS.STATUS.notIn("DONE", "CANCELLED")))
+            .fetch()
+            .map(this::recordToTask);
+    }
+
     /** Returns all tasks due today (due_date on today's date, not archived). */
     public List<Task> findDueToday() {
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Clock, CheckCircle2, Calendar, Zap, Plus } from 'lucide-react'
 import type { Task, TimeBlock, Category, Goal } from '../types'
 import { PRIORITY_META, STATUS_META } from '../types'
@@ -27,6 +27,7 @@ export default function Today({ tasks, timeBlocks, categories, goals, onRefresh 
   const currentHour = now.getHours() + now.getMinutes() / 60
 
   const [newTaskHour, setNewTaskHour] = useState<number | null>(null)
+  const [focusedPendingIdx, setFocusedPendingIdx] = useState(-1)
 
   const todayTasks = useMemo(() =>
     tasks.filter(t => {
@@ -40,6 +41,49 @@ export default function Today({ tasks, timeBlocks, categories, goals, onRefresh 
   const progress     = todayTasks.length ? Math.round((doneTasks.length / todayTasks.length) * 100) : 0
 
   const dateStr = now.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  // Reset focus when pending list changes
+  useEffect(() => { setFocusedPendingIdx(-1) }, [pendingTasks.length])
+
+  const handleMarkDone = useCallback((t: Task) => {
+    bridge.markDone(t.id)
+    onRefresh()
+  }, [onRefresh])
+
+  // Global Ctrl+D — fires when this view's panel is focused
+  useEffect(() => {
+    const handler = () => {
+      if (focusedPendingIdx >= 0 && pendingTasks[focusedPendingIdx]) {
+        handleMarkDone(pendingTasks[focusedPendingIdx])
+      }
+    }
+    window.addEventListener('nexus:mark-done', handler as EventListener)
+    return () => window.removeEventListener('nexus:mark-done', handler as EventListener)
+  }, [focusedPendingIdx, pendingTasks, handleMarkDone])
+
+  const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (pendingTasks.length === 0) return
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setFocusedPendingIdx(i => Math.min(i < 0 ? 0 : i + 1, pendingTasks.length - 1))
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setFocusedPendingIdx(i => Math.max(i - 1, 0))
+        break
+      case 'Enter':
+      case ' ':
+        if (focusedPendingIdx >= 0) {
+          e.preventDefault()
+          handleMarkDone(pendingTasks[focusedPendingIdx])
+        }
+        break
+      case 'Escape':
+        setFocusedPendingIdx(-1)
+        break
+    }
+  }
 
   const handleNewTaskSave = (data: Partial<Task> & { recurrence?: unknown }) => {
     bridge.createTask(data as Partial<Task>)
@@ -146,15 +190,26 @@ export default function Today({ tasks, timeBlocks, categories, goals, onRefresh 
           </div>
         </div>
 
-        {/* Right panel — today's tasks */}
+        {/* Right panel — today's tasks
+            tabIndex makes it keyboard-focusable; ↑↓ navigates, Enter/Space marks done */}
         <div className="w-72 border-l border-white/[0.06] flex flex-col bg-[#0a1020] shrink-0">
           <div className="px-4 py-3 border-b border-white/[0.06]">
             <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider flex items-center gap-2">
               <Calendar size={11} className="text-accent" /> Due Today
             </p>
+            <p className="text-[9px] text-fg-subtle/40 mt-0.5">↑↓ navigate · Enter/Space done</p>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+          <div
+            className="flex-1 overflow-y-auto px-3 py-3 space-y-2 outline-none"
+            tabIndex={0}
+            onKeyDown={handlePanelKeyDown}
+            onFocus={e => {
+              if (e.target === e.currentTarget && focusedPendingIdx === -1 && pendingTasks.length > 0) {
+                setFocusedPendingIdx(0)
+              }
+            }}
+          >
             {todayTasks.length === 0 && (
               <div className="flex flex-col items-center justify-center h-32 gap-2 text-fg-subtle">
                 <CheckCircle2 size={28} className="opacity-20" />
@@ -163,13 +218,26 @@ export default function Today({ tasks, timeBlocks, categories, goals, onRefresh 
             )}
 
             {/* Pending */}
-            {pendingTasks.map(t => {
+            {pendingTasks.map((t, idx) => {
               const p = PRIORITY_META[t.priority]
               const s = STATUS_META[t.status]
+              const isFocused = idx === focusedPendingIdx
               return (
-                <div key={t.id} className="card px-3 py-3 relative overflow-hidden"
-                  style={{ borderLeft: `3px solid ${p.color}` }}>
+                <div
+                  key={t.id}
+                  className={`card px-3 py-3 relative overflow-hidden cursor-pointer transition-all ${isFocused ? 'ring-2 ring-accent/60 bg-white/[0.03]' : ''}`}
+                  style={{ borderLeft: `3px solid ${p.color}` }}
+                  onMouseEnter={() => setFocusedPendingIdx(idx)}
+                  onClick={() => handleMarkDone(t)}
+                  title="Click or press Enter/Space to mark done"
+                >
                   <div className="flex items-start gap-2">
+                    <button
+                      className="mt-0.5 shrink-0 text-fg-subtle hover:text-success transition-colors"
+                      onClick={e => { e.stopPropagation(); handleMarkDone(t) }}
+                    >
+                      <CheckCircle2 size={14} />
+                    </button>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-fg truncate">{t.title}</p>
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">

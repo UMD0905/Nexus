@@ -1,26 +1,29 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import type { Task, Category, Goal, Project, TimeBlock, Notification, NavSection } from './types'
 import * as bridge from './bridge'
 import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import QuickAdd from './components/QuickAdd'
-import Dashboard from './views/Dashboard'
-import TaskList from './views/TaskList'
-import Today from './views/Today'
-import Week from './views/Week'
-import Goals from './views/Goals'
-import Pomodoro from './views/Pomodoro'
-import Eisenhower from './views/Eisenhower'
-import Calendar from './views/Calendar'
-import Settings from './views/Settings'
 import SearchPalette from './components/SearchPalette'
-import Projects from './views/Projects'
-import Inbox from './views/Inbox'
-import Scheduled from './views/Scheduled'
-import Someday from './views/Someday'
-import Anytime from './views/Anytime'
-import Review from './views/Review'
-import Kanban from './views/Kanban'
+
+// Views are lazy-loaded so only the initial view is parsed on startup.
+const Dashboard  = lazy(() => import('./views/Dashboard'))
+const TaskList   = lazy(() => import('./views/TaskList'))
+const Today      = lazy(() => import('./views/Today'))
+const Week       = lazy(() => import('./views/Week'))
+const Goals      = lazy(() => import('./views/Goals'))
+const Pomodoro   = lazy(() => import('./views/Pomodoro'))
+const Eisenhower = lazy(() => import('./views/Eisenhower'))
+const Calendar   = lazy(() => import('./views/Calendar'))
+const Settings   = lazy(() => import('./views/Settings'))
+const Projects   = lazy(() => import('./views/Projects'))
+const Inbox      = lazy(() => import('./views/Inbox'))
+const Scheduled  = lazy(() => import('./views/Scheduled'))
+const Someday    = lazy(() => import('./views/Someday'))
+const Anytime    = lazy(() => import('./views/Anytime'))
+const Review     = lazy(() => import('./views/Review'))
+const Kanban     = lazy(() => import('./views/Kanban'))
+const Streaks    = lazy(() => import('./views/Streaks'))
 
 interface AppData {
   tasks: Task[]
@@ -202,25 +205,18 @@ export default function App() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Listen for bridge events (e.g. tray quick-add)
+  // Bridge events — fired from Java (scene-level key filter + tray)
+  // Ctrl+N, Ctrl+K, Ctrl+D are all intercepted in NexusApp.java and arrive here
+  // as pushEvent calls, so they work regardless of WebKit focus state.
   useEffect(() => {
     (window as Window).onBridgeEvent = (eventJson: string) => {
       try {
         const evt = JSON.parse(eventJson)
         if (evt.type === 'QUICK_ADD_OPEN') setShowQuickAdd(true)
-      } catch { /* ignore */ }
+        if (evt.type === 'SEARCH_OPEN')    setShowSearch(true)
+        if (evt.type === 'MARK_DONE')      window.dispatchEvent(new CustomEvent('nexus:mark-done'))
+      } catch { /* ignore malformed events */ }
     }
-  }, [])
-
-  // Ctrl+N → Quick Add (also handled at JavaFX level for WebKit compatibility)
-  // Ctrl+K → Search palette
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); setShowQuickAdd(true) }
-      if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setShowSearch(true) }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
   }, [])
 
   useEffect(() => {
@@ -309,6 +305,8 @@ export default function App() {
         return <Calendar tasks={data.tasks} categories={data.categories} goals={data.goals} onRefresh={refresh} />
       case 'matrix':
         return <Eisenhower tasks={data.tasks} />
+      case 'streaks':
+        return <Streaks categories={data.categories} />
       case 'pomodoro':
         return <Pomodoro />
       case 'settings':
@@ -365,7 +363,9 @@ export default function App() {
 
         <main className="flex-1 overflow-hidden relative">
           <div className="absolute inset-0 animate-fade-in" key={navKey}>
-            {renderView()}
+            <Suspense fallback={<div className="h-full bg-canvas" />}>
+              {renderView()}
+            </Suspense>
           </div>
         </main>
       </div>

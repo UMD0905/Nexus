@@ -35,6 +35,10 @@ public class NexusApp extends Application {
     private ServerSocket      instanceLock;
     private SystemTrayService trayService;
 
+    // Pre-maximized bounds — updated just before the window maximizes so we can
+    // restore them correctly when the user un-maximizes or closes while maximized.
+    private double savedX = 100, savedY = 100, savedW = 1280, savedH = 800;
+
     @Override
     public void start(Stage stage) {
         log.info("Starting Nexus UI...");
@@ -74,12 +78,26 @@ public class NexusApp extends Application {
             if (isFocused) Platform.runLater(mainWindow::focusWebView);
         });
 
-        // Intercept Ctrl+N at the JavaFX scene level — WebKit may consume it
-        // before JavaScript sees it (browser "new window" shortcut).
+        // Capture pre-maximized bounds so saveWindowState can persist them correctly.
+        stage.maximizedProperty().addListener((obs, wasMax, isMax) -> {
+            if (isMax) {
+                savedX = stage.getX();
+                savedY = stage.getY();
+                savedW = stage.getWidth();
+                savedH = stage.getHeight();
+            }
+        });
+
+        // Intercept global shortcuts at the JavaFX scene level.
+        // This is the only reliable way to guarantee they fire regardless of
+        // which element inside WebKit currently holds focus.
         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (event.isControlDown() && event.getCode() == KeyCode.N) {
-                bridge.pushEvent("QUICK_ADD_OPEN", null);
-                event.consume();
+            if (!event.isControlDown()) return;
+            switch (event.getCode()) {
+                case N -> { bridge.pushEvent("QUICK_ADD_OPEN", null); event.consume(); }
+                case K -> { bridge.pushEvent("SEARCH_OPEN",     null); event.consume(); }
+                case D -> { bridge.pushEvent("MARK_DONE",       null); event.consume(); }
+                default -> { /* let everything else through to WebKit */ }
             }
         });
 
@@ -165,11 +183,14 @@ public class NexusApp extends Application {
     private void saveWindowState(Stage stage) {
         try {
             Files.createDirectories(STATE.getParent());
+            // When maximized, save the pre-max bounds (tracked by the maximizedProperty listener)
+            // so that un-maximizing next session restores the correct size, not the screen size.
+            double x = stage.isMaximized() ? savedX : stage.getX();
+            double y = stage.isMaximized() ? savedY : stage.getY();
+            double w = stage.isMaximized() ? savedW : stage.getWidth();
+            double h = stage.isMaximized() ? savedH : stage.getHeight();
             Map<String, Object> s = Map.of(
-                "x",         stage.isMaximized() ? stage.getX() : stage.getX(),
-                "y",         stage.isMaximized() ? stage.getY() : stage.getY(),
-                "width",     stage.isMaximized() ? stage.getWidth()  : stage.getWidth(),
-                "height",    stage.isMaximized() ? stage.getHeight() : stage.getHeight(),
+                "x", x, "y", y, "width", w, "height", h,
                 "maximized", stage.isMaximized()
             );
             new ObjectMapper().writeValue(STATE.toFile(), s);

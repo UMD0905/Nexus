@@ -1,6 +1,7 @@
 package com.nexus.ui;
 
 import com.nexus.config.AppContext;
+import javafx.application.Platform;
 import javafx.concurrent.Worker;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;

@@ -1,0 +1,1 @@
+import{i as e}from"./index-RwN7izih.js";import t from"./TaskList-BDTKOknu.js";var n=e();function r({tasks:e,categories:r,goals:i,onRefresh:a}){return(0,n.jsx)(t,{tasks:e,categories:r,goals:i,title:`Anytime`,onRefresh:a})}export{r as default};

@@ -279,6 +279,36 @@ public class DashboardBridge {
         } catch (Exception e) { log.error("backupNow failed", e); }
     }
 
+    // ── Streak management ─────────────────────────────────────────────────────
+
+    public String getStreaks() {
+        try {
+            return toJson(ctx.getStreakService().getAllStreaks().stream()
+                .map(s -> BridgeDtos.streakDto(ctx, s)).toList());
+        } catch (Exception e) { return error(e); }
+    }
+
+    public String updateStreak(String json) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = new ObjectMapper().readValue(json, Map.class);
+            Streak patch = Streak.builder()
+                .id(data.get("id") instanceof Number n ? n.longValue() : null)
+                .title(String.valueOf(data.get("title")))
+                .categoryId(data.get("categoryId") instanceof Number n ? n.longValue() : null)
+                .currentStreak(data.get("currentStreak") instanceof Number n ? n.intValue() : 0)
+                .longestStreak(data.get("longestStreak") instanceof Number n ? n.intValue() : 0)
+                .build();
+            Streak updated = ctx.getStreakService().updateStreak(patch);
+            return toJson(BridgeDtos.streakDto(ctx, updated));
+        } catch (Exception e) { return error(e); }
+    }
+
+    public void deleteStreak(long id) {
+        try { ctx.getStreakService().deleteStreak(id); }
+        catch (Exception e) { log.error("deleteStreak failed id={}", id, e); }
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private Map<String, Integer> loadStatAdjustments() {

@@ -46,14 +46,30 @@ public class StreakRepository {
         return streak;
     }
 
+    public Optional<Streak> findById(long id) {
+        return dsl.selectFrom(STREAKS)
+            .where(STREAKS.ID.eq(id))
+            .fetchOptional()
+            .map(this::recordToStreak);
+    }
+
     public void update(Streak streak) {
         dsl.update(STREAKS)
+            .set(STREAKS.TITLE,               streak.getTitle())
+            .set(STREAKS.CATEGORY_ID,         streak.getCategoryId())
             .set(STREAKS.CURRENT_STREAK,      streak.getCurrentStreak())
             .set(STREAKS.LONGEST_STREAK,      streak.getLongestStreak())
             .set(STREAKS.LAST_COMPLETED_DATE, streak.getLastCompletedDate())
             .set(STREAKS.UPDATED_AT,          LocalDateTime.now())
             .where(STREAKS.ID.eq(streak.getId()))
             .execute();
+    }
+
+    public void delete(long id) {
+        dsl.deleteFrom(STREAKS)
+            .where(STREAKS.ID.eq(id))
+            .execute();
+        log.debug("Deleted streak id={}", id);
     }
 
     private void applyToRecord(Streak streak, org.jooq.Record record) {

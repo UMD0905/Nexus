@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, HardDriveDownload } from 'lucide-react'
+import { Save, HardDriveDownload, Info, FileArchive } from 'lucide-react'
 import * as bridge from '../bridge'
+import type { AppInfo } from '../bridge'
 
 type SettingsMap = Record<string, string>
 
@@ -44,6 +45,14 @@ function useSettings() {
 
 export default function Settings() {
   const { settings, save, saved } = useSettings()
+  const [appInfo, setAppInfo]         = useState<AppInfo | null>(null)
+  const [exporting, setExporting]     = useState(false)
+  const [exportPath, setExportPath]   = useState<string | null>(null)
+
+  useEffect(() => {
+    const info = bridge.getAppInfo()
+    if (info) setAppInfo(info)
+  }, [])
 
   const str  = (key: string) => settings[key] ?? ''
   const num  = (key: string, fallback: number) => parseInt(settings[key] ?? String(fallback), 10) || fallback
@@ -211,6 +220,70 @@ export default function Settings() {
                 <HardDriveDownload size={13} /> Backup Now
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* About / Diagnostics */}
+        <section className="card p-5 space-y-4">
+          <h2 className="text-sm font-bold text-fg border-b border-white/[0.06] pb-2 flex items-center gap-2">
+            <Info size={13} className="text-accent" /> About &amp; Diagnostics
+          </h2>
+
+          {appInfo ? (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+              {[
+                { label: 'App Version',      value: appInfo.version       },
+                { label: 'Schema Version',   value: appInfo.schemaVersion },
+                { label: 'Java',             value: appInfo.java          },
+                { label: 'OS',               value: appInfo.os            },
+                { label: 'DB Size',          value: appInfo.dbSize        },
+                { label: 'Tasks',            value: String(appInfo.taskCount)     },
+                { label: 'Goals',            value: String(appInfo.goalCount)     },
+                { label: 'Categories',       value: String(appInfo.categoryCount) },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">{label}</p>
+                  <p className="text-xs text-fg mt-0.5 truncate" title={value}>{value}</p>
+                </div>
+              ))}
+              <div className="col-span-2">
+                <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">DB Path</p>
+                <p className="text-xs text-fg mt-0.5 break-all">{appInfo.dbPath}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-fg-subtle">Loading…</p>
+          )}
+
+          <div className="pt-1 border-t border-white/[0.06] flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-fg">Export Diagnostics</p>
+              <p className="text-[11px] text-fg-subtle mt-0.5">
+                Zips the last 7 days of logs, settings keys (no values), and schema version to your Downloads folder.
+                Nothing leaves your machine automatically.
+              </p>
+              {exportPath && (
+                <p className="text-[10px] text-emerald-400 mt-1 break-all">Saved: {exportPath}</p>
+              )}
+            </div>
+            <button
+              className="btn-ghost flex items-center gap-1.5 text-xs py-1.5 px-3 shrink-0"
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true)
+                setExportPath(null)
+                try {
+                  const path = bridge.exportDiagnostics()
+                  if (path) setExportPath(path)
+                } finally {
+                  setExporting(false)
+                }
+              }}
+              title="Export diagnostics zip"
+            >
+              <FileArchive size={13} />
+              {exporting ? 'Exporting…' : 'Export zip'}
+            </button>
           </div>
         </section>
 

@@ -1,7 +1,6 @@
 package com.nexus.service;
 
 import com.nexus.model.Task;
-import com.nexus.model.TaskFilter;
 import com.nexus.repository.NotificationRepository;
 import com.nexus.repository.TaskRepository;
 import javafx.application.Platform;
@@ -96,7 +95,7 @@ public class ReminderService {
                 remindedDate = today;
             }
 
-            List<Task> tasks = taskRepo.findAll(TaskFilter.builder().showArchived(false).build());
+            List<Task> tasks = taskRepo.findWithActiveReminders();
             for (Task task : tasks) {
                 if (task.getReminderMinutesBefore() == null || task.getDueDate() == null) continue;
                 // Skip snoozed tasks
@@ -124,7 +123,7 @@ public class ReminderService {
             LocalDateTime now    = LocalDateTime.now();
             LocalDateTime cutoff = now.minusHours(24);
 
-            List<Task> tasks = taskRepo.findAll(TaskFilter.builder().showArchived(false).build());
+            List<Task> tasks = taskRepo.findWithActiveReminders();
             int caught = 0;
             for (Task task : tasks) {
                 if (task.getReminderMinutesBefore() == null || task.getDueDate() == null) continue;

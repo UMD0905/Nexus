@@ -46,6 +46,9 @@ declare global {
         exportData(path: string): string
         exportIcal(path: string): string
         backupNow(): void
+        getStreaks(): string
+        updateStreak(json: string): string
+        deleteStreak(id: number): void
       }
       planning: {
         getTimeBlocks(date: string): string
@@ -76,7 +79,7 @@ declare global {
         getProjectTaskCount(projectId: number): number
         getProjectProgress(projectId: number): number
       }
-      window: {
+      win: {
         minimizeWindow(): void
         maximizeWindow(): void
         closeWindow(): void
@@ -90,7 +93,16 @@ declare global {
         chooseFolder(title: string): string
         chooseFile(title: string, ext: string): string
         reorderCategories(orderedIdsJson: string): void
+        getAppInfo(): string
+        exportDiagnostics(): string
       }
+      // Window control proxies (called directly to avoid sub-bridge field traversal)
+      minimizeWindow(): void
+      maximizeWindow(): void
+      toggleMaximize(): void
+      closeWindow(): void
+      startDrag(screenX: number, screenY: number): void
+      dragWindow(screenX: number, screenY: number): void
       init(jsWindow: unknown): void
       pushEvent(type: string, payload: unknown): void
     }
@@ -106,13 +118,39 @@ function call<T>(fn: () => string): T {
 const b = () => window.nexusBridge
 
 // ── Window controls ───────────────────────────────────────────────────────
+// Called directly on the top-level bridge (not via sub-bridge field) for
+// reliable JSObject dispatch in JavaFX WebKit.
 
-export function minimizeWindow()  { b()?.window.minimizeWindow()  }
-export function maximizeWindow()  { b()?.window.maximizeWindow()  }
-export function toggleMaximize()  { b()?.window.toggleMaximize()  }
-export function closeWindow()     { b()?.window.closeWindow()     }
-export function startDrag(screenX: number, screenY: number)  { b()?.window.startDrag(screenX, screenY)  }
-export function dragWindow(screenX: number, screenY: number) { b()?.window.dragWindow(screenX, screenY) }
+export function minimizeWindow()  { b()?.minimizeWindow()  }
+export function maximizeWindow()  { b()?.maximizeWindow()  }
+export function toggleMaximize()  { b()?.toggleMaximize()  }
+export function closeWindow()     { b()?.closeWindow()     }
+export function startDrag(screenX: number, screenY: number)  { b()?.startDrag(screenX, screenY)  }
+export function dragWindow(screenX: number, screenY: number) { b()?.dragWindow(screenX, screenY) }
+
+// ── About / Diagnostics ───────────────────────────────────────────────────
+
+export interface AppInfo {
+  version:       string
+  java:          string
+  os:            string
+  dbPath:        string
+  dbSize:        string
+  taskCount:     number
+  goalCount:     number
+  categoryCount: number
+  schemaVersion: string
+}
+
+export function getAppInfo(): AppInfo | null {
+  if (!b()) return null
+  return call(() => b()!.win.getAppInfo())
+}
+
+export function exportDiagnostics(): string | null {
+  if (!b()) return null
+  return call(() => b()!.win.exportDiagnostics())
+}
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
@@ -294,11 +332,11 @@ export function deleteTimeBlock(id: number) {
 
 export function getNotifications(): Notification[] {
   if (!b()) return []
-  return call(() => b()!.window.getNotifications())
+  return call(() => b()!.win.getNotifications())
 }
 
 export function markNotificationRead(id: number) {
-  b()?.window.markNotificationRead(id)
+  b()?.win.markNotificationRead(id)
 }
 
 // ── Pomodoro ──────────────────────────────────────────────────────────────
@@ -347,15 +385,29 @@ export function backupNow() {
   b()?.dashboard.backupNow()
 }
 
+export function getStreaks(): import('./types').Streak[] {
+  if (!b()) return []
+  return call(() => b()!.dashboard.getStreaks())
+}
+
+export function updateStreak(data: Partial<import('./types').Streak> & { id: number }): import('./types').Streak | null {
+  if (!b()) return null
+  return call(() => b()!.dashboard.updateStreak(JSON.stringify(data)))
+}
+
+export function deleteStreak(id: number) {
+  b()?.dashboard.deleteStreak(id)
+}
+
 export function chooseFolder(title: string): string | null {
   if (!b()) return null
-  const r = b()!.window.chooseFolder(title)
+  const r = b()!.win.chooseFolder(title)
   try { return JSON.parse(r) } catch { return null }
 }
 
 export function chooseFile(title: string, ext: string): string | null {
   if (!b()) return null
-  const r = b()!.window.chooseFile(title, ext)
+  const r = b()!.win.chooseFile(title, ext)
   try { return JSON.parse(r) } catch { return null }
 }
 
@@ -428,18 +480,18 @@ export function updateRecurrenceRule(data: {
 }
 
 export function reorderCategories(orderedIds: number[]) {
-  b()?.window.reorderCategories(JSON.stringify(orderedIds))
+  b()?.win.reorderCategories(JSON.stringify(orderedIds))
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────
 
 export function getSettings(): Record<string, string> {
   if (!b()) return {}
-  return call(() => b()!.window.getSettings())
+  return call(() => b()!.win.getSettings())
 }
 
 export function setSetting(key: string, value: string) {
-  b()?.window.setSetting(key, value)
+  b()?.win.setSetting(key, value)
 }
 
 // ── Mock data (dev mode) ──────────────────────────────────────────────────

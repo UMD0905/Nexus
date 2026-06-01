@@ -2,9 +2,9 @@
 setlocal
 
 REM ── Paths ─────────────────────────────────────────────────────────────────────
-set "JPACKAGE=%USERPROFILE%\.jdks\corretto-21.0.6\bin\jpackage.exe"
+set "JPACKAGE=C:\Program Files\Android\openjdk\jdk-21.0.8\bin\jpackage.exe"
 set "MVN=%USERPROFILE%\.m2\wrapper\dists\apache-maven-3.9.14-bin\1cb7fhup6b5n3bed6kckbrnspv\apache-maven-3.9.14\bin\mvn"
-set "JAVA_HOME=%USERPROFILE%\.jdks\corretto-21.0.6"
+set "JAVA_HOME=C:\Program Files\Android\openjdk\jdk-21.0.8"
 set "PROJECT_DIR=%~dp0"
 
 echo.
