@@ -1,7 +1,6 @@
 package com.nexus.ui;
 
 import com.nexus.config.AppContext;
-import javafx.animation.FadeTransition;
 import javafx.application.Platform;
 import javafx.concurrent.Worker;
 import javafx.geometry.Pos;
@@ -16,7 +15,6 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
-import javafx.util.Duration;
 import netscape.javascript.JSObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +37,8 @@ import java.util.jar.JarFile;
  * we extract the entire {@code /webui/} tree to a temp directory on first run
  * and load from there via a plain {@code file://} URL instead.
  *
- * <p>A branded loading screen is shown while the WebView is initialising so
- * the user never sees a black window during startup.
+ * <p>A branded loading screen covers the window while the WebView is
+ * initialising so the user never sees a black or blank window.
  */
 public class MainWindow extends StackPane {
 
@@ -62,38 +60,39 @@ public class MainWindow extends StackPane {
     }
 
     private void build() {
-        // Dark canvas background — visible during the loading phase so there
-        // is never a black or white flash before the React app paints.
+        // Dark canvas — visible during the loading phase so there is never a
+        // black flash before the React app paints.
         setBackground(new Background(new BackgroundFill(Color.web("#090d18"), null, null)));
 
-        // ── Loading splash ────────────────────────────────────────────────────
-        Label title = new Label("Nexus");
-        title.setStyle("""
-            -fx-text-fill: #6366f1;
-            -fx-font-size: 28px;
-            -fx-font-weight: bold;
-            """);
-
-        Label subtitle = new Label("Loading…");
-        subtitle.setStyle("""
-            -fx-text-fill: #475569;
-            -fx-font-size: 13px;
-            """);
-
-        VBox splash = new VBox(8, title, subtitle);
+        // ── Loading splash ─────────────────────────────────────────────────────
+        Label titleLabel = new Label("Nexus");
+        titleLabel.setStyle(
+            "-fx-text-fill: #6366f1;" +
+            "-fx-font-size: 32px;" +
+            "-fx-font-weight: bold;"
+        );
+        Label subLabel = new Label("Loading…");
+        subLabel.setStyle(
+            "-fx-text-fill: #64748b;" +
+            "-fx-font-size: 13px;"
+        );
+        VBox splash = new VBox(10, titleLabel, subLabel);
         splash.setAlignment(Pos.CENTER);
         splash.setMouseTransparent(true);
 
-        // ── WebView ───────────────────────────────────────────────────────────
+        // ── WebView ────────────────────────────────────────────────────────────
         webView = new WebView();
         WebEngine engine = webView.getEngine();
 
+        // Start the WebView hidden — revealed only when the page finishes loading.
+        // Using setVisible(false) rather than setOpacity(0) is more reliable in
+        // the packaged build because it fully removes the WebKit surface from
+        // painting, avoiding any black-flash artefacts.
+        webView.setVisible(false);
         webView.setStyle("-fx-background-color: #090d18;");
         webView.setPageFill(Color.web("#090d18"));
-        webView.setOpacity(0);          // hidden until page finishes loading
         engine.setJavaScriptEnabled(true);
 
-        // JavaFX WebView does not implement confirm/prompt natively — wire them up.
         engine.setConfirmHandler(message -> {
             Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
             alert.setTitle("Confirm");
@@ -122,16 +121,14 @@ public class MainWindow extends StackPane {
 
                 log.info("React app loaded — bridge injected");
 
-                // Fade the WebView in and hide the splash at the same time.
+                // Swap: show the WebView, remove the loading splash.
                 Platform.runLater(() -> {
-                    FadeTransition fadeIn = new FadeTransition(Duration.millis(250), webView);
-                    fadeIn.setFromValue(0);
-                    fadeIn.setToValue(1);
-                    fadeIn.setOnFinished(e -> getChildren().remove(splash));
-                    fadeIn.play();
-
+                    getChildren().remove(splash);
+                    webView.setVisible(true);
                     webView.requestFocus();
                 });
+            } else if (newState == Worker.State.FAILED) {
+                log.error("WebView failed to load: {}", engine.getLoadWorker().getException());
             }
         });
 
@@ -141,20 +138,19 @@ public class MainWindow extends StackPane {
             log.info("Loading WebUI from: {}", url);
         } else {
             log.error("webui/index.html not found — run 'npm run build' first");
-            engine.loadContent("""
-                <html><body style="background:#090d18;color:#94a3b8;font-family:sans-serif;
-                  display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-                  <div style="text-align:center">
-                    <h2 style="color:#6366f1">Nexus</h2>
-                    <p>UI not found. Run <code>npm run build</code> inside
-                       <code>src/main/webui/</code> then restart.</p>
-                  </div></body></html>""");
+            engine.loadContent(
+                "<html><body style=\"background:#090d18;color:#94a3b8;font-family:sans-serif;" +
+                "  display:flex;align-items:center;justify-content:center;height:100vh;margin:0\">" +
+                "  <div style=\"text-align:center\">" +
+                "    <h2 style=\"color:#6366f1\">Nexus</h2>" +
+                "    <p>UI not found. Run <code>npm run build</code> inside" +
+                "       <code>src/main/webui/</code> then restart.</p>" +
+                "  </div></body></html>");
         }
 
-        // Splash sits on top of the WebView; removed once the fade-in completes.
+        // WebView behind, splash on top — splash is removed once the page loads.
         getChildren().addAll(webView, splash);
 
-        // Re-focus the WebView whenever the user clicks inside the window.
         webView.setOnMouseClicked(e -> webView.requestFocus());
     }
 

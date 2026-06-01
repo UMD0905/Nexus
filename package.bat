@@ -8,8 +8,13 @@ set "JAVA_HOME=C:\Program Files\Android\openjdk\jdk-21.0.8"
 set "PROJECT_DIR=%~dp0"
 
 echo.
+echo [0/2] Copying platform JARs not managed by Maven package profile...
+set "M2=%USERPROFILE%\.m2\repository"
+copy /y "%M2%\org\openjfx\javafx-swing\21.0.5\javafx-swing-21.0.5-win.jar" "%PROJECT_DIR%target\dist-input\" >nul 2>&1
+
+echo.
 echo [1/2] Building dist-input with Maven...
-call "%MVN%" package -Ppackage -DskipTests -f "%PROJECT_DIR%pom.xml"
+call "%MVN%" clean package -Ppackage -DskipTests -f "%PROJECT_DIR%pom.xml"
 if errorlevel 1 ( echo Maven build FAILED & pause & exit /b 1 )
 
 echo.
@@ -45,6 +50,10 @@ del /q "%PROJECT_DIR%dist\Nexus\app\javafx-controls-21.0.5.jar" 2>nul
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-fxml-21.0.5.jar" 2>nul
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-graphics-21.0.5.jar" 2>nul
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-swing-21.0.5.jar" 2>nul
+REM If jpackage didn't copy the swing win-jar from input, copy it directly from Maven repo
+if not exist "%PROJECT_DIR%dist\Nexus\app\mods\javafx-swing-21.0.5-win.jar" (
+    copy /y "%M2%\org\openjfx\javafx-swing\21.0.5\javafx-swing-21.0.5-win.jar" "%PROJECT_DIR%dist\Nexus\app\mods\" >nul
+)
 del /q "%PROJECT_DIR%dist\Nexus\app\javafx-web-21.0.5.jar" 2>nul
 
 echo.
