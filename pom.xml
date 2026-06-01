@@ -34,13 +34,12 @@
     <!-- Utility -->
     <lombok.version>1.18.34</lombok.version>
     <jackson.version>2.17.2</jackson.version>
+    <!-- JNA — Windows credential manager (Phase B) and other native calls -->
+    <jna.version>5.14.0</jna.version>
 
     <!-- Logging -->
     <slf4j.version>2.0.13</slf4j.version>
     <logback.version>1.5.6</logback.version>
-
-    <!-- Charts -->
-    <jfreechart.version>1.5.4</jfreechart.version>
 
     <!-- Testing -->
     <junit.version>5.10.3</junit.version>
@@ -54,136 +53,26 @@
     <jooq.codegen.db.url>jdbc:h2:file:${project.build.directory}/jooq-gen/nexusdb</jooq.codegen.db.url>
   </properties>
 
-  <dependencies>
-
-    <!-- ═══════════════════════ JavaFX ═══════════════════════ -->
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-controls</artifactId>
-      <version>${javafx.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-fxml</artifactId>
-      <version>${javafx.version}</version>
-    </dependency>
-    <!-- Required for JFreeChart → JavaFX bridge via SwingFXUtils -->
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-swing</artifactId>
-      <version>${javafx.version}</version>
-    </dependency>
-    <!-- WebView (Chromium-based, needed for React frontend) -->
-    <dependency>
-      <groupId>org.openjfx</groupId>
-      <artifactId>javafx-web</artifactId>
-      <version>${javafx.version}</version>
-    </dependency>
-
-    <!-- ═══════════════════════ UI Toolkit ═══════════════════════ -->
-    <dependency>
-      <groupId>io.github.mkpaz</groupId>
-      <artifactId>atlantafx-base</artifactId>
-      <version>${atlantafx.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.kordamp.ikonli</groupId>
-      <artifactId>ikonli-javafx</artifactId>
-      <version>${ikonli.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.kordamp.ikonli</groupId>
-      <artifactId>ikonli-materialdesign2-pack</artifactId>
-      <version>${ikonli.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.controlsfx</groupId>
-      <artifactId>controlsfx</artifactId>
-      <version>${controlsfx.version}</version>
-    </dependency>
-
-    <!-- ═══════════════════════ Database ═══════════════════════ -->
-    <dependency>
-      <groupId>com.h2database</groupId>
-      <artifactId>h2</artifactId>
-      <version>${h2.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.jooq</groupId>
-      <artifactId>jooq</artifactId>
-      <version>${jooq.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-core</artifactId>
-      <version>${flyway.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.zaxxer</groupId>
-      <artifactId>HikariCP</artifactId>
-      <version>${hikari.version}</version>
-    </dependency>
-
-    <!-- ═══════════════════════ Utility ═══════════════════════ -->
-    <dependency>
-      <groupId>org.projectlombok</groupId>
-      <artifactId>lombok</artifactId>
-      <version>${lombok.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-      <version>${jackson.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.datatype</groupId>
-      <artifactId>jackson-datatype-jsr310</artifactId>
-      <version>${jackson.version}</version>
-    </dependency>
-
-    <!-- ═══════════════════════ Logging ═══════════════════════ -->
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
-      <version>${slf4j.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>ch.qos.logback</groupId>
-      <artifactId>logback-classic</artifactId>
-      <version>${logback.version}</version>
-    </dependency>
-
-    <!-- ═══════════════════════ Charts ═══════════════════════ -->
-    <dependency>
-      <groupId>org.jfree</groupId>
-      <artifactId>jfreechart</artifactId>
-      <version>${jfreechart.version}</version>
-    </dependency>
-
-    <!-- ═══════════════════════ Testing ═══════════════════════ -->
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter</artifactId>
-      <version>${junit.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-junit-jupiter</artifactId>
-      <version>${mockito.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.testfx</groupId>
-      <artifactId>testfx-junit5</artifactId>
-      <version>${testfx.version}</version>
-      <scope>test</scope>
-    </dependency>
-
-  </dependencies>
-
+  <!-- Filter only app.properties so ${project.version} is written at build time.
+       All other resources are copied verbatim to avoid interpolating logback / SQL. -->
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+        <excludes>
+          <exclude>app.properties</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>app.properties</include>
+        </includes>
+      </resource>
+    </resources>
+
     <plugins>
 
       <!-- ── 1. Compiler ── -->
@@ -313,21 +202,180 @@
       </plugin>
 
       <!-- ── 5. Surefire (JUnit 5) ── -->
+      <!-- @{argLine} is late-bound so JaCoCo's prepare-agent can prepend its agent path -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.3.1</version>
         <configuration>
-          <argLine>--add-opens=java.base/java.lang=ALL-UNNAMED</argLine>
+          <argLine>@{argLine} --add-opens=java.base/java.lang=ALL-UNNAMED</argLine>
         </configuration>
+      </plugin>
+
+      <!-- ── 6. JaCoCo — report only, no threshold (A6) ── -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.12</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals><goal>prepare-agent</goal></goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals><goal>report</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- ── 7. SpotBugs — fail on High severity only (A6) ── -->
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>4.8.6.4</version>
+        <configuration>
+          <effort>Low</effort>
+          <threshold>High</threshold>
+          <failOnError>true</failOnError>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>verify</phase>
+            <goals><goal>check</goal></goals>
+          </execution>
+        </executions>
       </plugin>
 
     </plugins>
   </build>
 
+  <dependencies>
+
+    <!-- ═══════════════════════ JavaFX ═══════════════════════ -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-fxml</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+    <!-- WebView (Chromium-based, needed for React frontend) -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-web</artifactId>
+      <version>${javafx.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ UI Toolkit ═══════════════════════ -->
+    <dependency>
+      <groupId>io.github.mkpaz</groupId>
+      <artifactId>atlantafx-base</artifactId>
+      <version>${atlantafx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.kordamp.ikonli</groupId>
+      <artifactId>ikonli-javafx</artifactId>
+      <version>${ikonli.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.kordamp.ikonli</groupId>
+      <artifactId>ikonli-materialdesign2-pack</artifactId>
+      <version>${ikonli.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.controlsfx</groupId>
+      <artifactId>controlsfx</artifactId>
+      <version>${controlsfx.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Database ═══════════════════════ -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>${h2.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jooq</groupId>
+      <artifactId>jooq</artifactId>
+      <version>${jooq.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <version>${flyway.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.zaxxer</groupId>
+      <artifactId>HikariCP</artifactId>
+      <version>${hikari.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Utility ═══════════════════════ -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <version>${lombok.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <!-- JNA — wraps advapi32 Credential Manager for Phase B (SecretStore) -->
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna-platform</artifactId>
+      <version>${jna.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Logging ═══════════════════════ -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
+    </dependency>
+
+    <!-- ═══════════════════════ Testing ═══════════════════════ -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <version>${mockito.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testfx</groupId>
+      <artifactId>testfx-junit5</artifactId>
+      <version>${testfx.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+  </dependencies>
+
   <!-- ══════════════════════════════════════════════════════════════
        Native packaging profile  (mvn package -Ppackage -DskipTests)
-       Assembles a dist-input/ folder, then you run jpackage once.
+       Assembles a dist-input/ folder, then jpackage creates the EXE.
        ══════════════════════════════════════════════════════════════ -->
   <profiles>
     <profile>
@@ -348,12 +396,6 @@
         <dependency>
           <groupId>org.openjfx</groupId>
           <artifactId>javafx-fxml</artifactId>
-          <version>${javafx.version}</version>
-          <classifier>win</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.openjfx</groupId>
-          <artifactId>javafx-swing</artifactId>
           <version>${javafx.version}</version>
           <classifier>win</classifier>
         </dependency>
@@ -437,6 +479,37 @@
                 </configuration>
               </execution>
 
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         Security profile  (mvn -Psecurity dependency-check:check)
+         Run in CI with NVD cache; skip locally to keep builds fast.
+         Fails on CVSS ≥ 7 (A6).
+         ══════════════════════════════════════════════════════════════ -->
+    <profile>
+      <id>security</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>10.0.4</version>
+            <configuration>
+              <failBuildOnCVSS>7</failBuildOnCVSS>
+              <!-- NVD data dir is cached in CI via actions/cache -->
+              <dataDirectory>${project.basedir}/.nvd-cache</dataDirectory>
+              <formats>
+                <format>HTML</format>
+              </formats>
+            </configuration>
+            <executions>
+              <execution>
+                <goals><goal>check</goal></goals>
+              </execution>
             </executions>
           </plugin>
         </plugins>
