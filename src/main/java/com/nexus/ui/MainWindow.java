@@ -1,17 +1,22 @@
 package com.nexus.ui;
 
 import com.nexus.config.AppContext;
+import javafx.animation.FadeTransition;
 import javafx.application.Platform;
 import javafx.concurrent.Worker;
+import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
+import javafx.util.Duration;
 import netscape.javascript.JSObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +38,9 @@ import java.util.jar.JarFile;
  * JavaFX WebKit cannot load subresources (JS/CSS) from {@code jar:} URLs, so
  * we extract the entire {@code /webui/} tree to a temp directory on first run
  * and load from there via a plain {@code file://} URL instead.
+ *
+ * <p>A branded loading screen is shown while the WebView is initialising so
+ * the user never sees a black window during startup.
  */
 public class MainWindow extends StackPane {
 
@@ -54,13 +62,35 @@ public class MainWindow extends StackPane {
     }
 
     private void build() {
+        // Dark canvas background — visible during the loading phase so there
+        // is never a black or white flash before the React app paints.
         setBackground(new Background(new BackgroundFill(Color.web("#090d18"), null, null)));
 
+        // ── Loading splash ────────────────────────────────────────────────────
+        Label title = new Label("Nexus");
+        title.setStyle("""
+            -fx-text-fill: #6366f1;
+            -fx-font-size: 28px;
+            -fx-font-weight: bold;
+            """);
+
+        Label subtitle = new Label("Loading…");
+        subtitle.setStyle("""
+            -fx-text-fill: #475569;
+            -fx-font-size: 13px;
+            """);
+
+        VBox splash = new VBox(8, title, subtitle);
+        splash.setAlignment(Pos.CENTER);
+        splash.setMouseTransparent(true);
+
+        // ── WebView ───────────────────────────────────────────────────────────
         webView = new WebView();
         WebEngine engine = webView.getEngine();
 
         webView.setStyle("-fx-background-color: #090d18;");
         webView.setPageFill(Color.web("#090d18"));
+        webView.setOpacity(0);          // hidden until page finishes loading
         engine.setJavaScriptEnabled(true);
 
         // JavaFX WebView does not implement confirm/prompt natively — wire them up.
@@ -91,9 +121,17 @@ public class MainWindow extends StackPane {
                     bridge.pushEvent("NOTIFICATION", null));
 
                 log.info("React app loaded — bridge injected");
-                // Give the WebView keyboard focus once the page is ready.
-                // Without this, no keyboard events reach the React app.
-                Platform.runLater(webView::requestFocus);
+
+                // Fade the WebView in and hide the splash at the same time.
+                Platform.runLater(() -> {
+                    FadeTransition fadeIn = new FadeTransition(Duration.millis(250), webView);
+                    fadeIn.setFromValue(0);
+                    fadeIn.setToValue(1);
+                    fadeIn.setOnFinished(e -> getChildren().remove(splash));
+                    fadeIn.play();
+
+                    webView.requestFocus();
+                });
             }
         });
 
@@ -113,10 +151,10 @@ public class MainWindow extends StackPane {
                   </div></body></html>""");
         }
 
-        getChildren().add(webView);
+        // Splash sits on top of the WebView; removed once the fade-in completes.
+        getChildren().addAll(webView, splash);
 
         // Re-focus the WebView whenever the user clicks inside the window.
-        // This recovers focus if it was lost to a JavaFX dialog or OS event.
         webView.setOnMouseClicked(e -> webView.requestFocus());
     }
 
