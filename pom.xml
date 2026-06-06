@@ -21,7 +21,7 @@
     <javafx.version>21.0.5</javafx.version>
 
     <!-- UI -->
-    <atlantafx.version>2.0.1</atlantafx.version>
+    <atlantafx.version>2.1.0</atlantafx.version>
     <ikonli.version>12.3.1</ikonli.version>
     <controlsfx.version>11.2.1</controlsfx.version>
 
