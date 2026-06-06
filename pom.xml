@@ -18,7 +18,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- JavaFX -->
-    <javafx.version>21.0.5</javafx.version>
+    <javafx.version>26.0.1</javafx.version>
 
     <!-- UI -->
     <atlantafx.version>2.0.1</atlantafx.version>
