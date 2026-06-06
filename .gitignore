@@ -5,14 +5,13 @@ target/
 .kotlin
 
 ### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositaries.xml
-.idea/compiler.xml
-.idea/libraries/
-.idea/workspace.xml
+.idea/
 *.iws
 *.iml
 *.ipr
+
+### Claude Code ###
+.claude/
 
 ### Eclipse ###
 .apt_generated
