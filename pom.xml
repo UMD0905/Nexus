@@ -28,7 +28,7 @@
     <!-- Database -->
     <h2.version>2.2.224</h2.version>
     <jooq.version>3.19.10</jooq.version>
-    <flyway.version>10.15.0</flyway.version>
+    <flyway.version>12.8.1</flyway.version>
     <hikari.version>5.1.0</hikari.version>
 
     <!-- Utility -->
