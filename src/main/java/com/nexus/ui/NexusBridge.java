@@ -42,6 +42,7 @@ public class NexusBridge {
     public final PlanningBridge  planning;
     public final WindowBridge    win;      // NOT "window" — that name is shadowed by the DOM global
     public final ProjectBridge   projects;
+    public final FinanceBridge   finance;
 
     /** JS window handle — kept alive by the WebView engine. */
     private JSObject jsWindow;
@@ -58,6 +59,7 @@ public class NexusBridge {
         this.planning  = new PlanningBridge(ctx);
         this.win       = new WindowBridge(ctx, stage);
         this.projects  = new ProjectBridge(ctx);
+        this.finance   = new FinanceBridge(ctx);
     }
 
     /** Called once after the page loads to give us a handle to push events to JS. */

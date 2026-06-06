@@ -70,7 +70,7 @@ export default function SearchPalette({ tasks, archivedTasks, goals, onClose, on
   return (
     <div
       className="fixed inset-0 z-[200] flex items-start justify-center pt-24 px-4"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}
+      style={{ background: 'rgba(0,0,0,0.6)' }}
       onClick={onClose}
     >
       <div

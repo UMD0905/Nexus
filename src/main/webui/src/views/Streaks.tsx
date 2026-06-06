@@ -31,7 +31,7 @@ function EditDialog({ streak, categories, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      style={{ background: 'rgba(0,0,0,0.7)' }}>
       <div className="w-80 bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-fg flex items-center gap-2">
@@ -230,7 +230,7 @@ export default function Streaks({ categories }: Props) {
         const s = streaks.find(x => x.id === confirmDeleteId)!
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+            style={{ background: 'rgba(0,0,0,0.7)' }}>
             <div className="w-72 bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in p-6 space-y-4">
               <h2 className="text-sm font-bold text-fg">Delete streak?</h2>
               <p className="text-xs text-fg-subtle">

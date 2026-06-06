@@ -241,6 +241,36 @@ public class RecurrenceService {
         log.info("AFTER_COMPLETION: generated next instance '{}' for {}", instance.getTitle(), nextDate);
     }
 
+    /**
+     * Archives recurring task instances whose due date has passed and whose status
+     * is still TODO (i.e. the user never completed or explicitly skipped them).
+     * This prevents the task list from accumulating stale past-due entries.
+     *
+     * <p>Only instances with a non-null due_date are affected; the root/template task
+     * (which has no due_date) is always left alone.
+     *
+     * @return number of instances archived
+     */
+    public int archivePastDueInstances() {
+        LocalDate today = LocalDate.now();
+        List<Task> active = taskRepo.findAll(
+            com.nexus.model.TaskFilter.builder().showArchived(false).build());
+
+        int archived = 0;
+        for (Task t : active) {
+            if (t.getRecurrenceRuleId() == null) continue;      // not a recurring task
+            if (t.getDueDate() == null) continue;                // root template — skip
+            if (t.getStatus() != com.nexus.model.enums.TaskStatus.TODO) continue;
+            if (!t.getDueDate().toLocalDate().isBefore(today)) continue; // not yet past due
+
+            t.setArchived(true);
+            t.setArchivedAt(java.time.LocalDateTime.now());
+            taskRepo.update(t);
+            archived++;
+        }
+        return archived;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private List<LocalDate> getDatesForRule(RecurrenceRule rule, LocalDate from, int daysAhead) {

@@ -16,6 +16,7 @@
   - [Goals](#goals)
   - [Projects](#projects)
   - [Life Areas (Categories)](#life-areas-categories)
+  - [Finance Tracker](#finance-tracker)
   - [Pomodoro Timer](#pomodoro-timer)
   - [Reminders & Notifications](#reminders--notifications)
   - [Search & Quick Actions](#search--quick-actions)
@@ -88,7 +89,7 @@ The core of Nexus is a rich, fully-featured task system designed to capture ever
 
 ### Views
 
-Nexus has 18 purpose-built views, all reachable from the sidebar:
+Nexus has 19 purpose-built views, all reachable from the sidebar:
 
 | View | Description |
 |---|---|
@@ -109,6 +110,7 @@ Nexus has 18 purpose-built views, all reachable from the sidebar:
 | **Eisenhower Matrix** | 2×2 urgent/important quadrant board. Drag tasks between quadrants to reprioritize your workload visually. |
 | **Review** | Structured weekly review: completed this week, tasks that slipped (overdue), and what's coming up next week. |
 | **Archive** | Soft-deleted tasks. Browse, search, and restore individual tasks or bulk-restore all. |
+| **Finance** | Personal finance tracker — income/expense transactions, monthly trend chart, category breakdown, and balance overrides in UZS and USD. |
 | **Settings** | App preferences, backup/restore, iCal export, theme toggle, and About & Diagnostics panel. |
 
 ---
@@ -175,6 +177,45 @@ Life areas are the top-level organizing buckets — think Work, Health, Side Pro
 - A task or goal can belong to **multiple life areas simultaneously** (M2M relationship)
 - Projects are nested under their parent life area in the sidebar hierarchy
 - Life area colors are used throughout the UI for color-coded dots, badges, and chart slices
+
+---
+
+### Finance Tracker
+
+Track your personal income and expenses in two currencies with a clean, fully integrated finance dashboard:
+
+**Transactions:**
+- Log **Income** or **Expense** transactions with amount, currency (UZS / USD), category, description, and date
+- Edit or delete any transaction inline without leaving the view
+- Category suggestions auto-complete as you type (Salary, Freelance, Rent, Food, etc.)
+
+**Dashboard stats (4 stat cards):**
+| Card | Description |
+|---|---|
+| **Total Balance** | All-time net (income − expenses). Manually overridable. |
+| **This Month Income** | Sum of all income transactions in the current calendar month. Manually overridable. |
+| **This Month Expenses** | Sum of all expenses in the current calendar month. Manually overridable. |
+| **This Month Net** | Derived: month income − month expenses (no override). |
+
+- **Manual balance override** — hover any overridable card, click the pencil icon, type a new value, and press **Accept**. The override is stored persistently and shown with a small indicator dot. Click the reset icon to revert to the calculated value.
+- Stat cards are currency-aware — toggle between **UZS** and **USD** in the top bar to see all figures in the selected currency simultaneously.
+
+**Tabs:**
+| Tab | Contents |
+|---|---|
+| **Overview** | Monthly trend bar chart (last 6 months), category breakdown by income and expense, 8 most recent transactions |
+| **Income** | Full income history grouped by date, with a category breakdown |
+| **Expenses** | Full expense history grouped by date, with a category breakdown |
+| **All History** | Month navigator — step backward/forward through any month to see all transactions for that period |
+
+**Charts & analytics:**
+- **Monthly trend** — side-by-side income/expense bars for the last 6 months, filtered by the active currency
+- **Category breakdown** — horizontal bar chart showing each category's share of total spending or income (currency-filtered)
+
+**Data:**
+- Stored in a dedicated `TRANSACTIONS` table (`DECIMAL(15,2)` amounts, VARCHAR category/description, indexed by date, currency, and type)
+- Supports both **UZS** (Uzbekistani soʻm) and **USD** with fully independent totals
+- Amounts are stored with 2 decimal places; the UI formats UZS without decimals and USD to 2 decimal places
 
 ---
 
@@ -362,6 +403,7 @@ JavaFX Application (NexusApp.java)
                                          ├── DashboardBridge  dashboard.*
                                          ├── PlanningBridge   planning.*
                                          ├── ProjectBridge    projects.*
+                                         ├── FinanceBridge    finance.*
                                          └── WindowBridge     win.*
 ```
 
@@ -440,7 +482,7 @@ npm run build     # compile → src/main/resources/webui/  (picked up by the app
 
 On first launch Nexus will:
 1. Create `~/.nexus/data/` and `~/.nexus/logs/`
-2. Apply all Flyway migrations (V1–V13) automatically
+2. Apply all Flyway migrations (V1–V14) automatically
 3. Seed default life-area categories and sample tasks
 4. Acquire the single-instance TCP lock and open the window
 
@@ -522,6 +564,7 @@ src/main/java/com/nexus/
 │   ├── PomodoroSession.java
 │   ├── Streak.java
 │   ├── AppNotification.java
+│   ├── Transaction.java        ← finance transaction (income/expense)
 │   └── enums/
 │       ├── Priority.java       ← LOW, MEDIUM, HIGH, CRITICAL
 │       ├── TaskStatus.java     ← TODO, IN_PROGRESS, DONE, CANCELLED
@@ -534,7 +577,8 @@ src/main/java/com/nexus/
 │   ├── TagRepository.java
 │   ├── RecurrenceRuleRepository.java
 │   ├── NotificationRepository.java
-│   └── PomodoroSessionRepository.java
+│   ├── PomodoroSessionRepository.java
+│   └── TransactionRepository.java  ← finance transaction CRUD
 ├── service/
 │   ├── TaskService.java        ← CRUD, status transitions, recurrence hooks, mass actions
 │   ├── GoalService.java        ← progress tracking via linked tasks, auto-completion
@@ -549,6 +593,7 @@ src/main/java/com/nexus/
 │   ├── CategoryService.java    ← life area CRUD + drag-reorder position persistence
 │   ├── ProjectService.java     ← project CRUD + live task stats computation
 │   ├── SettingsService.java    ← key-value settings backed by H2 app_settings table
+│   ├── TransactionService.java ← finance transaction CRUD + currency totals
 │   ├── NotificationService.java ← in-app notification record CRUD
 │   └── SystemTrayService.java  ← Windows system tray icon, context menu, minimize-to-tray
 └── ui/
@@ -560,6 +605,7 @@ src/main/java/com/nexus/
         ├── DashboardBridge.java ← dashboard.* — stats, streaks, import/export
         ├── PlanningBridge.java ← planning.* — time blocks, categories, tags, Pomodoro
         ├── ProjectBridge.java  ← projects.* — project CRUD and task stats
+        ├── FinanceBridge.java  ← finance.* — transactions CRUD, stats, balance overrides
         ├── WindowBridge.java   ← win.* — window controls, notifications, settings, file pickers
         └── BridgeDtos.java     ← lightweight JSON DTOs (no domain object leakage to JS layer)
 
@@ -595,11 +641,12 @@ src/main/webui/src/
     ├── Pomodoro.tsx            ← focus timer with session history
     ├── Eisenhower.tsx          ← 2×2 urgent/important quadrant board
     ├── Review.tsx              ← weekly review: done / overdue / upcoming
+    ├── Finance.tsx             ← finance tracker: transactions, stats, charts, overrides
     ├── Settings.tsx            ← preferences, backup, export, about, diagnostics
     └── Archive.tsx             ← soft-deleted tasks with bulk restore
 
 src/main/resources/
-├── db/migration/               ← Flyway SQL migration scripts V1–V13
+├── db/migration/               ← Flyway SQL migration scripts V1–V14
 ├── app.properties              ← build-time version info (injected by Maven)
 └── webui/                      ← compiled React bundle (committed — no Node needed to run)
 
@@ -626,6 +673,7 @@ src/test/java/com/nexus/service/
 | V11 | Task snooze: snoozed_until field; notifications table for in-app notification records |
 | V12 | Defer/lifecycle buckets (defer_until, lifecycle enum), recurrence after-completion mode finalised |
 | V13 | Task templates table + energy log table for future energy-level tracking |
+| V14 | Finance schema: `TRANSACTIONS` table (id, type, amount `DECIMAL(15,2)`, currency, category, description, txn_date, created_at) with indexes on date, currency, and type |
 
 ---
 

@@ -7,15 +7,10 @@ import com.nexus.ui.MainWindow;
 import com.nexus.ui.NexusBridge;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyEvent;
-import javafx.scene.layout.Background;
-import javafx.scene.layout.BackgroundFill;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -53,12 +48,15 @@ public class NexusApp extends Application {
 
         this.primaryStage = stage;
 
-        // ── 1. Show the window immediately with a loading splash ───────────────
-        // This prevents the black-window gap that occurs when AppContext (DB init,
-        // Flyway migrations, recurrence generation) blocks the FX thread before
-        // stage.show() is ever called.
-        StackPane splash = buildSplash();
-        Scene scene = new Scene(splash, 1280, 800);
+        // ── 1. Create MainWindow immediately and use it as the scene root ──────
+        // The WebView lives inside MainWindow. By making it the scene root before
+        // stage.show() is called, the JavaFX renderer creates the GPU surface for
+        // WebKit in the same pass as the initial window paint — avoiding the
+        // black-screen artefact that occurs when the WebView is added to an
+        // already-showing scene (which resets the D3D swap chain).
+        MainWindow mainWindow = new MainWindow();
+
+        Scene scene = new Scene(mainWindow, 1280, 800);
         scene.setFill(Color.web("#090d18"));
 
         stage.initStyle(StageStyle.UNDECORATED);
@@ -69,24 +67,53 @@ public class NexusApp extends Application {
 
         restoreWindowState(stage);
         stage.show();
+        stage.toFront();
+        stage.requestFocus();
 
-        // ── 2. Initialise AppContext off the FX thread ────────────────────────
-        // DB creation, Flyway migrations, recurrence generation, and service
-        // startup are all pure Java / JOOQ — safe to run on a background thread.
+        // ── 2. Wire hotkeys and window listeners (no bridge needed yet) ────────
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (!event.isControlDown()) return;
+            // Bridge may not be ready yet; mainWindow.onAppReady sets it up.
+        });
+
+        stage.maximizedProperty().addListener((obs, wasMax, isMax) -> {
+            if (!isMax) {
+                // Window just un-maximized: capture the restored geometry so
+                // saveWindowState() can persist the correct non-maximized size/position
+                // on exit.  Saving while maximized would store the full-screen dimensions
+                // which restores to wrong bounds after the next launch unmaximize.
+                savedX = stage.getX();
+                savedY = stage.getY();
+                savedW = stage.getWidth();
+                savedH = stage.getHeight();
+            }
+        });
+
+        stage.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (isFocused) Platform.runLater(() -> {
+                mainWindow.focusWebView();
+                mainWindow.repaintWebView();
+            });
+        });
+
+        stage.iconifiedProperty().addListener((obs, wasIconified, isIconified) -> {
+            if (isIconified) {
+                if (trayService != null) trayService.handleMinimize();
+            } else {
+                Platform.runLater(mainWindow::repaintWebView);
+            }
+        });
+
+        // ── 3. Initialise AppContext off the FX thread ────────────────────────
         Thread initThread = new Thread(() -> {
             try {
                 AppContext ctx = AppContext.getInstance();
 
-                // ── 3. Back on FX thread: build the real UI and swap it in ────
                 Platform.runLater(() -> {
                     try {
                         NexusBridge bridge = new NexusBridge(ctx, stage);
-                        MainWindow mainWindow = new MainWindow(ctx, bridge);
 
-                        // Replace the loading splash with the real root node.
-                        scene.setRoot(mainWindow);
-
-                        // Wire hotkeys at the scene level (most reliable intercept point).
+                        // Hotkeys now that bridge is available.
                         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
                             if (!event.isControlDown()) return;
                             switch (event.getCode()) {
@@ -97,21 +124,6 @@ public class NexusApp extends Application {
                             }
                         });
 
-                        // Capture pre-maximized bounds for correct window-state save.
-                        stage.maximizedProperty().addListener((obs, wasMax, isMax) -> {
-                            if (isMax) {
-                                savedX = stage.getX();
-                                savedY = stage.getY();
-                                savedW = stage.getWidth();
-                                savedH = stage.getHeight();
-                            }
-                        });
-
-                        // Restore WebView focus when the window comes back to the foreground.
-                        stage.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-                            if (isFocused) Platform.runLater(mainWindow::focusWebView);
-                        });
-
                         // System tray
                         trayService = new SystemTrayService(stage, ctx, () -> {
                             bridge.pushEvent("QUICK_ADD_OPEN", null);
@@ -119,15 +131,12 @@ public class NexusApp extends Application {
                         });
                         trayService.install();
 
-                        stage.iconifiedProperty().addListener((obs, wasIconified, isIconified) -> {
-                            if (isIconified) trayService.handleMinimize();
-                        });
-
-                        Platform.runLater(mainWindow::focusWebView);
+                        // Hand off to MainWindow — injects bridge once page is loaded.
+                        mainWindow.onAppReady(ctx, bridge);
                         log.info("Nexus started.");
 
                     } catch (Exception e) {
-                        log.error("Failed to build main window", e);
+                        log.error("Failed to initialise app context on FX thread", e);
                     }
                 });
 
@@ -136,7 +145,7 @@ public class NexusApp extends Application {
                 Platform.runLater(() -> {
                     Label err = new Label("Failed to initialise: " + e.getMessage());
                     err.setStyle("-fx-text-fill: #f87171; -fx-font-size: 14px;");
-                    ((StackPane) scene.getRoot()).getChildren().setAll(err);
+                    mainWindow.getChildren().setAll(err);
                 });
             }
         }, "nexus-init");
@@ -151,30 +160,6 @@ public class NexusApp extends Application {
         if (trayService != null) trayService.remove();
         releaseInstanceLock();
         try { AppContext.getInstance().shutdown(); } catch (Exception ignored) {}
-    }
-
-    // ── Loading splash ────────────────────────────────────────────────────────
-
-    private StackPane buildSplash() {
-        Label title = new Label("Nexus");
-        title.setStyle("""
-            -fx-text-fill: #6366f1;
-            -fx-font-size: 32px;
-            -fx-font-weight: bold;
-            """);
-
-        Label sub = new Label("Starting…");
-        sub.setStyle("""
-            -fx-text-fill: #475569;
-            -fx-font-size: 13px;
-            """);
-
-        VBox box = new VBox(10, title, sub);
-        box.setAlignment(Pos.CENTER);
-
-        StackPane pane = new StackPane(box);
-        pane.setBackground(new Background(new BackgroundFill(Color.web("#090d18"), null, null)));
-        return pane;
     }
 
     // ── Single-instance lock ──────────────────────────────────────────────────

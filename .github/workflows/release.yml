@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  release:
+    name: Build & release Windows installer
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed for changelog git log range
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/main/webui/package-lock.json
+
+      - name: Extract version (strip leading v)
+        id: version
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}" -replace '^v', ''
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+
+      - name: Build React frontend
+        working-directory: src/main/webui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Assemble dist-input via Maven
+        run: mvn package -Ppackage -DskipTests --batch-mode
+
+      - name: Run jpackage
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.version.outputs.VERSION }}"
+          # Build the array of --java-options arguments
+          $javaOpts = @(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-exports=javafx.base/com.sun.javafx.event=ALL-UNNAMED",
+            "--add-opens=javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED",
+            "--add-opens=javafx.controls/com.sun.javafx.scene.control.behavior=ALL-UNNAMED",
+            "--add-exports=javafx.web/com.sun.webkit=ALL-UNNAMED"
+          )
+          $javaOptsArgs = $javaOpts | ForEach-Object { "--java-options", $_ }
+
+          & jpackage `
+            --type exe `
+            --name Nexus `
+            --app-version $ver `
+            --input target/dist-input `
+            --main-jar nexus-app.jar `
+            --main-class com.nexus.Main `
+            --module-path target/dist-input `
+            --add-modules "javafx.controls,javafx.fxml,javafx.web,javafx.graphics,javafx.base,javafx.media" `
+            @javaOptsArgs `
+            --win-dir-chooser `
+            --win-shortcut `
+            --win-menu `
+            --dest target/installer
+
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Locate installer EXE
+        id: installer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path target/installer -Filter "*.exe" | Select-Object -First 1
+          "EXE_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+          "EXE_NAME=$($exe.Name)"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+
+      - name: Compute SHA-256
+        id: checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "${{ steps.installer.outputs.EXE_PATH }}" -Algorithm SHA256).Hash.ToLower()
+          $outFile = "target/installer/${{ steps.installer.outputs.EXE_NAME }}.sha256"
+          "$hash  ${{ steps.installer.outputs.EXE_NAME }}" | Out-File -FilePath $outFile -Encoding ascii
+          "CHECKSUM_FILE=$outFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+          "SHA256=$hash"           | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+
+      - name: Generate release notes from commits since last tag
+        id: notes
+        shell: pwsh
+        run: |
+          $prev = git describe --tags --abbrev=0 HEAD^ 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $prev) {
+            $log = git log --pretty=format:"- %s (%h)" --no-merges
+          } else {
+            $log = git log "$prev..HEAD" --pretty=format:"- %s (%h)" --no-merges
+          }
+          $body = @"
+          ## What's changed
+
+          $($log -join "`n")
+
+          ---
+          **SHA-256:** ``${{ steps.checksum.outputs.SHA256 }}``
+          "@
+          New-Item -ItemType Directory -Force -Path target | Out-Null
+          $body | Out-File -FilePath target/release-notes.md -Encoding utf8
+          "NOTES_FILE=target/release-notes.md" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding ascii
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Nexus ${{ github.ref_name }}
+          body_path: ${{ steps.notes.outputs.NOTES_FILE }}
+          files: |
+            ${{ steps.installer.outputs.EXE_PATH }}
+            ${{ steps.checksum.outputs.CHECKSUM_FILE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

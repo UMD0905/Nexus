@@ -52,7 +52,7 @@ function StreakEditDialog({ streak, categories, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      style={{ background: 'rgba(0,0,0,0.7)' }}>
       <div className="w-80 bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-fg flex items-center gap-2">
@@ -216,11 +216,11 @@ export default function Dashboard() {
             const val = stats[key as keyof typeof stats] as number
             const adj = stats.statAdjustments?.[key] ?? 0
             return (
-              <div key={key} className="card px-4 py-4 relative overflow-hidden animate-fade-in group"
+              <div key={key} className="card px-4 py-4 relative overflow-hidden group"
                 style={{ borderLeft: `3px solid ${color}` }}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-3xl font-bold text-fg" style={{ textShadow: `0 0 20px ${color}40` }}>
+                    <p className="text-3xl font-bold text-fg">
                       {val}
                     </p>
                     <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mt-1">{label}</p>
@@ -266,12 +266,9 @@ export default function Dashboard() {
                 <XAxis dataKey="day" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-                <Bar dataKey="completed" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="completed" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {barData.map((_, i) => (
-                    <Cell key={i} fill={i === todayIdx ? '#10b981' : '#6366f1'}
-                      style={{ filter: i === todayIdx
-                        ? 'drop-shadow(0 0 8px rgba(16,185,129,0.5))'
-                        : 'drop-shadow(0 0 4px rgba(99,102,241,0.3))' }} />
+                    <Cell key={i} fill={i === todayIdx ? '#10b981' : '#6366f1'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -289,7 +286,7 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={72}
-                    paddingAngle={3} dataKey="value">
+                    paddingAngle={3} dataKey="value" isAnimationActive={false}>
                     {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="none" />)}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle()} />
@@ -332,13 +329,9 @@ export default function Dashboard() {
                   <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false}
                     tickLine={false} allowDecimals={false} />
                   <Tooltip contentStyle={tooltipStyle()} formatter={(v) => [v ?? 0, 'Completed']} />
-                  <Bar dataKey="completed" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="completed" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                     {monthly.map((_, i) => (
-                      <Cell key={i}
-                        fill={i === bestMonthIdx ? '#10b981' : '#6366f1'}
-                        style={{ filter: i === bestMonthIdx
-                          ? 'drop-shadow(0 0 8px rgba(16,185,129,0.5))'
-                          : 'drop-shadow(0 0 4px rgba(99,102,241,0.3))' }} />
+                      <Cell key={i} fill={i === bestMonthIdx ? '#10b981' : '#6366f1'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -358,10 +351,9 @@ export default function Dashboard() {
                 const active = s.active
                 return (
                   <div key={s.id}
-                    className="card px-5 py-4 w-44 animate-fade-in relative group"
+                    className="card px-5 py-4 w-44 relative group"
                     style={{
                       borderLeft: `3px solid ${active ? '#f59e0b' : '#374151'}`,
-                      boxShadow: active ? '0 4px 24px rgba(245,158,11,0.12)' : undefined,
                     }}>
 
                     {/* Edit / Delete — appear on hover */}
@@ -395,7 +387,6 @@ export default function Dashboard() {
                     </div>
                     <p className="text-2xl font-bold" style={{
                       color: active ? '#f59e0b' : '#4b5563',
-                      textShadow: active ? '0 0 16px rgba(245,158,11,0.4)' : undefined,
                     }}>
                       {s.currentStreak}d
                     </p>

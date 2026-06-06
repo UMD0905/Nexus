@@ -117,6 +117,11 @@ public class GoalBridge {
 
     private String error(Exception e) {
         log.error("Bridge error: {}", e.getMessage(), e);
-        return "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}";
+        try {
+            return json.writeValueAsString(java.util.Map.of("error",
+                e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+        } catch (Exception ex) {
+            return "{\"error\":\"unknown error\"}";
+        }
     }
 }

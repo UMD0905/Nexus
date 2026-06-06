@@ -46,25 +46,29 @@ public final class BridgeDtos {
         m.put("deferUntil",         t.getDeferUntil()  != null ? t.getDeferUntil().toString()  : null);
         m.put("lifecycle",          t.getLifecycle() != null ? t.getLifecycle() : "ANYTIME");
         m.put("projectId",          t.getProjectId());
-        m.put("goalId",             ctx.getGoalService().findGoalIdByTask(t.getId()).orElse(null));
+        Long goalId = null;
+        try { goalId = ctx.getGoalService().findGoalIdByTask(t.getId()).orElse(null); } catch (Exception ignored) {}
+        m.put("goalId", goalId);
         return m;
     }
 
     public static Map<String, Object> categoryDto(Category c) {
-        return Map.of(
-            "id",       c.getId(),
-            "name",     c.getName(),
-            "color",    c.getColor() != null ? c.getColor() : "#6366f1",
-            "position", c.getPosition()
-        );
+        // Use LinkedHashMap — Map.of() throws NullPointerException if any value is null
+        // (e.g. a category with a null name would crash the entire getTasks() call)
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id",       c.getId());
+        m.put("name",     c.getName() != null ? c.getName() : "");
+        m.put("color",    c.getColor() != null ? c.getColor() : "#6366f1");
+        m.put("position", c.getPosition());
+        return m;
     }
 
     public static Map<String, Object> tagDto(Tag t) {
-        return Map.of(
-            "id",    t.getId(),
-            "name",  t.getName(),
-            "color", t.getColor() != null ? t.getColor() : "#6366f1"
-        );
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id",    t.getId());
+        m.put("name",  t.getName() != null ? t.getName() : "");
+        m.put("color", t.getColor() != null ? t.getColor() : "#6366f1");
+        return m;
     }
 
     public static Map<String, Object> subtaskDto(Subtask s) {
@@ -94,9 +98,13 @@ public final class BridgeDtos {
         m.put("categories",  g.getCategories() != null
             ? g.getCategories().stream().map(BridgeDtos::categoryDto).toList() : List.of());
         m.put("tasks",       g.getTasks() != null
-            ? g.getTasks().stream().map(t -> Map.of(
-                "id", t.getId(), "title", t.getTitle(),
-                "status", t.getStatus() != null ? t.getStatus().name() : "TODO")).toList()
+            ? g.getTasks().stream().map(t -> {
+                Map<String, Object> tm = new LinkedHashMap<>();
+                tm.put("id",     t.getId());
+                tm.put("title",  t.getTitle() != null ? t.getTitle() : "");
+                tm.put("status", t.getStatus() != null ? t.getStatus().name() : "TODO");
+                return tm;
+            }).toList()
             : List.of());
         return m;
     }
@@ -115,14 +123,14 @@ public final class BridgeDtos {
     }
 
     public static Map<String, Object> timeBlockDto(TimeBlock b) {
-        return Map.of(
-            "id",        b.getId(),
-            "title",     b.getTitle(),
-            "date",      b.getBlockDate() != null ? b.getBlockDate().toString() : "",
-            "startTime", b.getStartTime() != null ? b.getStartTime().toString() : "",
-            "endTime",   b.getEndTime()   != null ? b.getEndTime().toString()   : "",
-            "color",     b.getColor()     != null ? b.getColor() : "#6366f1"
-        );
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id",        b.getId());
+        m.put("title",     b.getTitle() != null ? b.getTitle() : "");
+        m.put("date",      b.getBlockDate() != null ? b.getBlockDate().toString() : "");
+        m.put("startTime", b.getStartTime() != null ? b.getStartTime().toString() : "");
+        m.put("endTime",   b.getEndTime()   != null ? b.getEndTime().toString()   : "");
+        m.put("color",     b.getColor()     != null ? b.getColor() : "#6366f1");
+        return m;
     }
 
     public static Map<String, Object> projectDto(Project p) {

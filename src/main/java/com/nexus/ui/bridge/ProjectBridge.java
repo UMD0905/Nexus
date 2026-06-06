@@ -126,6 +126,11 @@ public class ProjectBridge {
 
     private String error(Exception e) {
         log.error("ProjectBridge error: {}", e.getMessage(), e);
-        return "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}";
+        try {
+            return json.writeValueAsString(Map.of("error",
+                e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+        } catch (Exception ex) {
+            return "{\"error\":\"unknown error\"}";
+        }
     }
 }

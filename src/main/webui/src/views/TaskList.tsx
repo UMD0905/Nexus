@@ -338,7 +338,7 @@ export default function TaskList({ tasks, categories, goals, title, onRefresh, s
 
   // ── Per-card handlers ─────────────────────────────────────────────────────
 
-  const handleSave = (data: Partial<Task> & { recurrence?: { enabled: boolean; type: string; days: string[]; endDate: string } }) => {
+  const handleSave = (data: Partial<Task> & { recurrence?: { enabled: boolean; type: string; days: string[]; endDate: string; mode?: string } }) => {
     if (data.id) {
       bridge.updateTask(data as Partial<Task> & { id: number })
     } else if (data.recurrence?.enabled) {
@@ -347,6 +347,7 @@ export default function TaskList({ tasks, categories, goals, title, onRefresh, s
         recurrenceType: data.recurrence.type,
         recurrenceDays: data.recurrence.days.join(','),
         recurrenceEndDate: data.recurrence.endDate || undefined,
+        recurrenceMode: data.recurrence.mode || 'FIXED',
       } as Parameters<typeof bridge.createTask>[0])
     } else {
       bridge.createTask(data)

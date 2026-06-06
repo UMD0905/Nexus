@@ -108,13 +108,16 @@ export default function QuickAdd({ onClose }: Props) {
     }
 
     const saved = bridge.createTask(taskData)
-    if (saved) {
+    if (saved && saved.id) {
       const title = saved.title ?? parsed.title
       setToast(`Task created: ${title}`)
       setTimeout(() => {
         setToast(null)
         onClose()
       }, 1200)
+    } else if (!saved) {
+      setToast('Failed to create task — check logs')
+      setTimeout(() => setToast(null), 2500)
     }
   }
 
@@ -130,7 +133,7 @@ export default function QuickAdd({ onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center pt-24"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+      style={{ background: 'rgba(0,0,0,0.75)' }}
       onClick={onClose}
     >
       <div

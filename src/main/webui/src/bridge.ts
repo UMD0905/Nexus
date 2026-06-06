@@ -79,6 +79,17 @@ declare global {
         getProjectTaskCount(projectId: number): number
         getProjectProgress(projectId: number): number
       }
+      finance: {
+        getTransactions(): string
+        getTransactionsByMonth(year: number, month: number): string
+        addTransaction(json: string): string
+        updateTransaction(json: string): string
+        deleteTransaction(id: number): void
+        getStats(): string
+        getOverrides(): string
+        setOverride(key: string, amount: string): void
+        clearOverride(key: string): void
+      }
       win: {
         minimizeWindow(): void
         maximizeWindow(): void
@@ -107,15 +118,45 @@ declare global {
       pushEvent(type: string, payload: unknown): void
     }
     onBridgeEvent?: (eventJson: string) => void
+    // Direct sub-bridge window members — injected by MainWindow.tryFinish() via setMember
+    // to avoid unreliable Java field traversal in JavaFX WebKit
+    nexusBridgeTasks?:     NonNullable<Window['nexusBridge']>['tasks']
+    nexusBridgeGoals?:     NonNullable<Window['nexusBridge']>['goals']
+    nexusBridgeDashboard?: NonNullable<Window['nexusBridge']>['dashboard']
+    nexusBridgePlanning?:  NonNullable<Window['nexusBridge']>['planning']
+    nexusBridgeWin?:       NonNullable<Window['nexusBridge']>['win']
+    nexusBridgeProjects?:  NonNullable<Window['nexusBridge']>['projects']
+    nexusBridgeFinance?:   NonNullable<Window['nexusBridge']>['finance']
   }
 }
 
 function call<T>(fn: () => string): T {
-  try { return JSON.parse(fn()) as T }
-  catch { return [] as unknown as T }
+  try {
+    const result = JSON.parse(fn()) as T
+    // Detect Java-side errors — log and treat as empty
+    if (result !== null && typeof result === 'object' && !Array.isArray(result) && 'error' in (result as Record<string, unknown>)) {
+      console.error('[bridge]', (result as Record<string, unknown>).error)
+      return [] as unknown as T
+    }
+    return result
+  } catch (e) {
+    console.error('[bridge] call failed:', e)
+    return [] as unknown as T
+  }
 }
 
 const b = () => window.nexusBridge
+
+// Sub-bridge accessors — use dedicated window members injected via setMember
+// instead of field traversal (e.g. nexusBridge.tasks) which is unreliable in
+// JavaFX WebKit and can silently return undefined after the first page interaction.
+const bTasks     = () => window.nexusBridgeTasks
+const bGoals     = () => window.nexusBridgeGoals
+const bDashboard = () => window.nexusBridgeDashboard
+const bPlanning  = () => window.nexusBridgePlanning
+const bWin       = () => window.nexusBridgeWin
+const bProjects  = () => window.nexusBridgeProjects
+const bFinance   = () => window.nexusBridgeFinance
 
 // ── Window controls ───────────────────────────────────────────────────────
 // Called directly on the top-level bridge (not via sub-bridge field) for
@@ -144,166 +185,214 @@ export interface AppInfo {
 
 export function getAppInfo(): AppInfo | null {
   if (!b()) return null
-  return call(() => b()!.win.getAppInfo())
+  return call(() => bWin()!.getAppInfo())
 }
 
 export function exportDiagnostics(): string | null {
   if (!b()) return null
-  return call(() => b()!.win.exportDiagnostics())
+  return call(() => bWin()!.exportDiagnostics())
 }
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
 export function getTasks(filter: Record<string, unknown> = {}): Task[] {
   if (!b()) return MOCK_TASKS
-  // showDeferred is a client-side-only concept that maps to a different bridge call
-  if (filter.showDeferred) {
-    const { showDeferred: _, ...rest } = filter
-    return call(() => b()!.tasks.getTasks(JSON.stringify({ ...rest, showDeferred: true })))
+  try {
+    const raw = filter.showDeferred
+      ? (() => { const { showDeferred: _, ...rest } = filter; return bTasks()!.getTasks(JSON.stringify({ ...rest, showDeferred: true })) })()
+      : bTasks()!.getTasks(JSON.stringify(filter))
+    const result = JSON.parse(raw)
+    return Array.isArray(result) ? result as Task[] : []
+  } catch (e) {
+    console.error('[bridge] getTasks failed:', e)
+    return []
   }
-  return call(() => b()!.tasks.getTasks(JSON.stringify(filter)))
 }
 
 export function getArchivedTasks(): Task[] {
   if (!b()) return []
-  return call(() => b()!.tasks.getArchivedTasks())
+  return call(() => bTasks()!.getArchivedTasks())
 }
 
 export function createTask(data: Partial<Task>): Task | null {
   if (!b()) return null
-  return call(() => b()!.tasks.createTask(JSON.stringify(data)))
+  try {
+    const raw = bTasks()!.createTask(JSON.stringify(data))
+    const result = JSON.parse(raw) as unknown
+    if (!result || typeof result !== 'object' || Array.isArray(result) || 'error' in (result as Record<string, unknown>)) {
+      console.error('[bridge] createTask error:', (result as Record<string, unknown>)?.error)
+      return null
+    }
+    return result as Task
+  } catch (e) {
+    console.error('[bridge] createTask failed:', e)
+    return null
+  }
 }
 
 export function updateTask(data: Partial<Task> & { id: number }): Task | null {
   if (!b()) return null
-  return call(() => b()!.tasks.updateTask(JSON.stringify(data)))
+  try {
+    const raw = bTasks()!.updateTask(JSON.stringify(data))
+    const result = JSON.parse(raw) as unknown
+    if (!result || typeof result !== 'object' || Array.isArray(result) || 'error' in (result as Record<string, unknown>)) {
+      console.error('[bridge] updateTask error:', (result as Record<string, unknown>)?.error)
+      return null
+    }
+    return result as Task
+  } catch (e) {
+    console.error('[bridge] updateTask failed:', e)
+    return null
+  }
 }
 
 export function deleteTask(id: number) {
-  b()?.tasks.deleteTask(id)
+  bTasks()?.deleteTask(id)
 }
 
 export function archiveTask(id: number) {
-  b()?.tasks.archiveTask(id)
+  bTasks()?.archiveTask(id)
 }
 
 export function restoreTask(id: number) {
-  b()?.tasks.restoreTask(id)
+  bTasks()?.restoreTask(id)
 }
 
 export function markDone(id: number): Task | null {
   if (!b()) return null
-  return call(() => b()!.tasks.markDone(id))
+  try {
+    const raw = bTasks()!.markDone(id)
+    const result = JSON.parse(raw) as unknown
+    if (!result || typeof result !== 'object' || Array.isArray(result) || 'error' in (result as Record<string, unknown>)) {
+      console.error('[bridge] markDone error:', (result as Record<string, unknown>)?.error)
+      return null
+    }
+    return result as Task
+  } catch (e) {
+    console.error('[bridge] markDone failed:', e)
+    return null
+  }
 }
 
 export function markInProgress(id: number) {
-  b()?.tasks.markInProgress(id)
+  bTasks()?.markInProgress(id)
 }
 
 export function snoozeTask(taskId: number, minutes: number) {
-  b()?.tasks.snoozeTask(taskId, minutes)
+  bTasks()?.snoozeTask(taskId, minutes)
 }
 
 // ── Categories ────────────────────────────────────────────────────────────
 
 export function getCategories(): Category[] {
   if (!b()) return MOCK_CATS
-  return call(() => b()!.planning.getCategories())
+  return call(() => bPlanning()!.getCategories())
 }
 
 export function createCategory(name: string, color: string): Category | null {
   if (!b()) return null
-  return call(() => b()!.planning.createCategory(JSON.stringify({ name, color })))
+  return call(() => bPlanning()!.createCategory(JSON.stringify({ name, color })))
 }
 
 export function updateCategory(data: { id: number; name?: string; color?: string }): Category | null {
   if (!b()) return null
-  return call(() => b()!.planning.updateCategory(JSON.stringify(data)))
+  return call(() => bPlanning()!.updateCategory(JSON.stringify(data)))
 }
 
 export function deleteCategory(id: number) {
-  b()?.planning.deleteCategory(id)
+  bPlanning()?.deleteCategory(id)
 }
 
 // ── Projects ──────────────────────────────────────────────────────────────
 
 export function getProjects(): Project[] {
   if (!b()) return MOCK_PROJECTS
-  return call(() => b()!.projects.getProjects())
+  return call(() => bProjects()!.getProjects())
 }
 
 export function getProjectsByCategory(categoryId: number): Project[] {
   if (!b()) return []
-  return call(() => b()!.projects.getProjectsByCategory(categoryId))
+  return call(() => bProjects()!.getProjectsByCategory(categoryId))
 }
 
 export function createProject(data: Partial<Project>): Project | null {
   if (!b()) return null
-  return call(() => b()!.projects.createProject(JSON.stringify(data)))
+  return call(() => bProjects()!.createProject(JSON.stringify(data)))
 }
 
 export function updateProject(data: Partial<Project> & { id: number }): Project | null {
   if (!b()) return null
-  return call(() => b()!.projects.updateProject(JSON.stringify(data)))
+  return call(() => bProjects()!.updateProject(JSON.stringify(data)))
 }
 
 export function deleteProject(id: number) {
-  b()?.projects.deleteProject(id)
+  bProjects()?.deleteProject(id)
 }
 
 export function getProjectTaskCount(projectId: number): number {
   if (!b()) return 0
-  return b()!.projects.getProjectTaskCount(projectId)
+  return bProjects()?.getProjectTaskCount(projectId) ?? 0
 }
 
 export function getProjectProgress(projectId: number): number {
   if (!b()) return 0
-  return b()!.projects.getProjectProgress(projectId)
+  return bProjects()?.getProjectProgress(projectId) ?? 0
 }
 
 // ── Goals ─────────────────────────────────────────────────────────────────
 
 export function getGoals(): Goal[] {
   if (!b()) return MOCK_GOALS
-  return call(() => b()!.goals.getGoals())
+  return call(() => bGoals()!.getGoals())
 }
 
 export function createGoal(data: Partial<Goal>): Goal | null {
   if (!b()) return null
-  return call(() => b()!.goals.createGoal(JSON.stringify(data)))
+  return call(() => bGoals()!.createGoal(JSON.stringify(data)))
 }
 
 export function updateGoal(data: Partial<Goal> & { id: number }): Goal | null {
   if (!b()) return null
-  return call(() => b()!.goals.updateGoal(JSON.stringify(data)))
+  return call(() => bGoals()!.updateGoal(JSON.stringify(data)))
 }
 
 export function updateGoalStatus(id: number, status: string) {
-  b()?.goals.updateGoalStatus(id, status)
+  bGoals()?.updateGoalStatus(id, status)
 }
 
 export function deleteGoal(id: number) {
-  b()?.goals.deleteGoal(id)
+  bGoals()?.deleteGoal(id)
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
 export function getDashboardStats(): DashboardStats {
   if (!b()) return MOCK_STATS
-  return call(() => b()!.dashboard.getDashboardStats())
+  try {
+    const raw = bDashboard()!.getDashboardStats()
+    const result = JSON.parse(raw) as unknown
+    if (!result || typeof result !== 'object' || Array.isArray(result) || 'error' in (result as Record<string, unknown>)) {
+      console.error('[bridge] getDashboardStats error:', (result as Record<string, unknown>)?.error)
+      return MOCK_STATS
+    }
+    return result as DashboardStats
+  } catch (e) {
+    console.error('[bridge] getDashboardStats failed:', e)
+    return MOCK_STATS
+  }
 }
 
 export function getMonthlyStats(): MonthlyStats[] {
   if (!b()) return MOCK_MONTHLY
-  return call(() => b()!.dashboard.getMonthlyStats())
+  return call(() => bDashboard()!.getMonthlyStats())
 }
 
 export function adjustStat(key: string, delta: number) {
-  b()?.dashboard.adjustStat(key, delta)
+  bDashboard()?.adjustStat(key, delta)
 }
 
 export function resetStatAdjustments() {
-  b()?.dashboard.resetStatAdjustments()
+  bDashboard()?.resetStatAdjustments()
 }
 
 // ── Time blocks ───────────────────────────────────────────────────────────
@@ -311,103 +400,103 @@ export function resetStatAdjustments() {
 export function getTimeBlocks(date?: string): TimeBlock[] {
   if (!b()) return MOCK_BLOCKS
   const d = date ?? new Date().toISOString().split('T')[0]
-  return call(() => b()!.planning.getTimeBlocks(d))
+  return call(() => bPlanning()!.getTimeBlocks(d))
 }
 
 export function getTodayBlocks(date: string): TimeBlock[] {
   if (!b()) return []
-  return call(() => b()!.planning.getTodayBlocks(date))
+  return call(() => bPlanning()!.getTodayBlocks(date))
 }
 
 export function createTimeBlock(data: Partial<TimeBlock>): TimeBlock | null {
   if (!b()) return null
-  return call(() => b()!.planning.createTimeBlock(JSON.stringify(data)))
+  return call(() => bPlanning()!.createTimeBlock(JSON.stringify(data)))
 }
 
 export function deleteTimeBlock(id: number) {
-  b()?.planning.deleteTimeBlock(id)
+  bPlanning()?.deleteTimeBlock(id)
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────
 
 export function getNotifications(): Notification[] {
   if (!b()) return []
-  return call(() => b()!.win.getNotifications())
+  return call(() => bWin()!.getNotifications())
 }
 
 export function markNotificationRead(id: number) {
-  b()?.win.markNotificationRead(id)
+  bWin()?.markNotificationRead(id)
 }
 
 // ── Pomodoro ──────────────────────────────────────────────────────────────
 
 export function logPomodoro() {
-  b()?.planning.logPomodoro()
+  bPlanning()?.logPomodoro()
 }
 
 export function startPomodoroSession(taskId: number, minutes: number): number {
   if (!b()) return 0
-  const r = call<{ sessionId: number }>(() => b()!.planning.startPomodoroSession(taskId, minutes))
+  const r = call<{ sessionId: number }>(() => bPlanning()!.startPomodoroSession(taskId, minutes))
   return r?.sessionId ?? 0
 }
 
 export function completePomodoroSession(sessionId: number) {
-  b()?.planning.completePomodoroSession(sessionId)
+  bPlanning()?.completePomodoroSession(sessionId)
 }
 
 export function abandonPomodoroSession(sessionId: number) {
-  b()?.planning.abandonPomodoroSession(sessionId)
+  bPlanning()?.abandonPomodoroSession(sessionId)
 }
 
 export function getPomodoroCount(taskId: number): number {
   if (!b()) return 0
-  return b()!.planning.getPomodoroCount(taskId)
+  return bPlanning()?.getPomodoroCount(taskId) ?? 0
 }
 
 // ── Export / Import ───────────────────────────────────────────────────────
 
 export function exportData(path: string): string {
   if (!b()) return ''
-  return b()!.dashboard.exportData(path)
+  return bDashboard()?.exportData(path) ?? ''
 }
 
 export function importData(filePath: string): { imported: number; skipped: number; errors: string[] } | null {
   if (!b()) return null
-  return call(() => b()!.dashboard.importData(filePath))
+  return call(() => bDashboard()!.importData(filePath))
 }
 
 export function exportIcal(path: string): string {
   if (!b()) return ''
-  return b()!.dashboard.exportIcal(path)
+  return bDashboard()?.exportIcal(path) ?? ''
 }
 
 export function backupNow() {
-  b()?.dashboard.backupNow()
+  bDashboard()?.backupNow()
 }
 
 export function getStreaks(): import('./types').Streak[] {
   if (!b()) return []
-  return call(() => b()!.dashboard.getStreaks())
+  return call(() => bDashboard()!.getStreaks())
 }
 
 export function updateStreak(data: Partial<import('./types').Streak> & { id: number }): import('./types').Streak | null {
   if (!b()) return null
-  return call(() => b()!.dashboard.updateStreak(JSON.stringify(data)))
+  return call(() => bDashboard()!.updateStreak(JSON.stringify(data)))
 }
 
 export function deleteStreak(id: number) {
-  b()?.dashboard.deleteStreak(id)
+  bDashboard()?.deleteStreak(id)
 }
 
 export function chooseFolder(title: string): string | null {
   if (!b()) return null
-  const r = b()!.win.chooseFolder(title)
+  const r = bWin()!.chooseFolder(title)
   try { return JSON.parse(r) } catch { return null }
 }
 
 export function chooseFile(title: string, ext: string): string | null {
   if (!b()) return null
-  const r = b()!.win.chooseFile(title, ext)
+  const r = bWin()!.chooseFile(title, ext)
   try { return JSON.parse(r) } catch { return null }
 }
 
@@ -415,60 +504,60 @@ export function chooseFile(title: string, ext: string): string | null {
 
 export function getSubtasks(taskId: number): Subtask[] {
   if (!b()) return []
-  return call(() => b()!.tasks.getSubtasks(taskId))
+  return call(() => bTasks()!.getSubtasks(taskId))
 }
 
 export function createSubtask(data: { taskId: number; title: string }): Subtask | null {
   if (!b()) return null
-  return call(() => b()!.tasks.createSubtask(JSON.stringify(data)))
+  return call(() => bTasks()!.createSubtask(JSON.stringify(data)))
 }
 
 export function toggleSubtask(id: number): Subtask | null {
   if (!b()) return null
-  return call(() => b()!.tasks.toggleSubtask(id))
+  return call(() => bTasks()!.toggleSubtask(id))
 }
 
 export function deleteSubtask(id: number) {
-  b()?.tasks.deleteSubtask(id)
+  bTasks()?.deleteSubtask(id)
 }
 
 export function reorderSubtasks(taskId: number, orderedIds: number[]) {
-  b()?.tasks.reorderSubtasks(taskId, JSON.stringify(orderedIds))
+  bTasks()?.reorderSubtasks(taskId, JSON.stringify(orderedIds))
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────
 
 export function getTags(): Tag[] {
   if (!b()) return []
-  return call(() => b()!.planning.getTags())
+  return call(() => bPlanning()!.getTags())
 }
 
 export function createTag(data: { name: string; color: string }): Tag | null {
   if (!b()) return null
-  return call(() => b()!.planning.createTag(JSON.stringify(data)))
+  return call(() => bPlanning()!.createTag(JSON.stringify(data)))
 }
 
 export function setTaskTags(taskId: number, tagIds: number[]): Tag[] {
   if (!b()) return []
-  return call(() => b()!.tasks.setTaskTags(taskId, JSON.stringify(tagIds)))
+  return call(() => bTasks()!.setTaskTags(taskId, JSON.stringify(tagIds)))
 }
 
 export function deleteTag(tagId: number) {
-  b()?.planning.deleteTag(tagId)
+  bPlanning()?.deleteTag(tagId)
 }
 
 // ── Recurring ─────────────────────────────────────────────────────────────
 
 export function skipRecurringInstance(taskId: number) {
-  b()?.tasks.skipRecurringInstance(taskId)
+  bTasks()?.skipRecurringInstance(taskId)
 }
 
 export function setTaskCategories(taskId: number, categoryIds: number[]) {
-  b()?.tasks.setTaskCategories(taskId, JSON.stringify(categoryIds))
+  bTasks()?.setTaskCategories(taskId, JSON.stringify(categoryIds))
 }
 
 export function setGoalCategories(goalId: number, categoryIds: number[]) {
-  b()?.goals.setGoalCategories(goalId, JSON.stringify(categoryIds))
+  bGoals()?.setGoalCategories(goalId, JSON.stringify(categoryIds))
 }
 
 export function updateRecurrenceRule(data: {
@@ -476,22 +565,109 @@ export function updateRecurrenceRule(data: {
   dayOfMonth?: number; monthOfYear?: number; mode?: string
 }): object | null {
   if (!b()) return null
-  return call(() => b()!.planning.updateRecurrenceRule(JSON.stringify(data)))
+  return call(() => bPlanning()!.updateRecurrenceRule(JSON.stringify(data)))
 }
 
 export function reorderCategories(orderedIds: number[]) {
-  b()?.win.reorderCategories(JSON.stringify(orderedIds))
+  bWin()?.reorderCategories(JSON.stringify(orderedIds))
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────
 
 export function getSettings(): Record<string, string> {
   if (!b()) return {}
-  return call(() => b()!.win.getSettings())
+  return call(() => bWin()!.getSettings())
 }
 
 export function setSetting(key: string, value: string) {
-  b()?.win.setSetting(key, value)
+  bWin()?.setSetting(key, value)
+}
+
+// ── Finance ───────────────────────────────────────────────────────────────
+
+export interface FinanceStats {
+  all: { incomeUzs: number; expenseUzs: number; incomeUsd: number; expenseUsd: number; balanceUzs: number; balanceUsd: number }
+  month: { incomeUzs: number; expenseUzs: number; incomeUsd: number; expenseUsd: number; balanceUzs: number; balanceUsd: number }
+}
+
+export interface FinanceTx {
+  id: number
+  type: 'INCOME' | 'EXPENSE'
+  amount: number
+  currency: 'UZS' | 'USD'
+  category: string | null
+  description: string | null
+  txnDate: string
+  createdAt: string
+}
+
+export function getTransactions(): FinanceTx[] {
+  if (!b()) return []
+  return call(() => bFinance()!.getTransactions())
+}
+
+export function getTransactionsByMonth(year: number, month: number): FinanceTx[] {
+  if (!b()) return []
+  return call(() => bFinance()!.getTransactionsByMonth(year, month))
+}
+
+export function addTransaction(data: Omit<FinanceTx, 'id' | 'createdAt'>): FinanceTx | null {
+  if (!b()) return null
+  try {
+    const raw = bFinance()!.addTransaction(JSON.stringify(data))
+    const result = JSON.parse(raw)
+    if (!result || 'error' in result) return null
+    return result as FinanceTx
+  } catch { return null }
+}
+
+export function updateTransaction(data: FinanceTx): FinanceTx | null {
+  if (!b()) return null
+  try {
+    const raw = bFinance()!.updateTransaction(JSON.stringify(data))
+    const result = JSON.parse(raw)
+    if (!result || 'error' in result) return null
+    return result as FinanceTx
+  } catch { return null }
+}
+
+export function deleteTransaction(id: number) {
+  bFinance()?.deleteTransaction(id)
+}
+
+export function getFinanceStats(): FinanceStats | null {
+  if (!b()) return null
+  try {
+    const raw = bFinance()!.getStats()
+    const result = JSON.parse(raw)
+    if (!result || 'error' in result) return null
+    return result as FinanceStats
+  } catch { return null }
+}
+
+export type FinanceOverrideKey =
+  | 'all.balance_uzs' | 'all.balance_usd'
+  | 'month.income_uzs' | 'month.income_usd'
+  | 'month.expense_uzs' | 'month.expense_usd'
+
+export type FinanceOverrides = Partial<Record<FinanceOverrideKey, number>>
+
+export function getFinanceOverrides(): FinanceOverrides {
+  if (!b()) return {}
+  try {
+    const raw = bFinance()!.getOverrides()
+    const result = JSON.parse(raw)
+    if (!result || 'error' in result) return {}
+    return result as FinanceOverrides
+  } catch { return {} }
+}
+
+export function setFinanceOverride(key: FinanceOverrideKey, amount: number) {
+  bFinance()?.setOverride(key, String(amount))
+}
+
+export function clearFinanceOverride(key: FinanceOverrideKey) {
+  bFinance()?.clearOverride(key)
 }
 
 // ── Mock data (dev mode) ──────────────────────────────────────────────────

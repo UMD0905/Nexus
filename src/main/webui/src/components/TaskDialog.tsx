@@ -141,22 +141,23 @@ export default function TaskDialog({ task, categories, goals, projects, onSave, 
       payload.recurrence = recurrence
     }
 
-    onSave(payload)
-
-    if (isEdit && task?.id) {
-      bridge.setTaskCategories(task.id, selectedCatIds)
-      bridge.setTaskTags(task.id, selectedTagIds)
-      if (showEditRecurrence && task.recurrenceRuleId) {
-        bridge.updateRecurrenceRule({
-          ruleId:     task.recurrenceRuleId,
-          type:       editRec.type,
-          daysOfWeek: editRec.days.join(','),
-          endDate:    editRec.endDate,
-          mode:       editRec.mode,
-        })
-      }
+    // Include tags in the payload so updateTask handles them atomically (before refresh)
+    if (isEdit) {
+      (payload as Record<string, unknown>).tagIds = selectedTagIds
     }
 
+    // Update recurrence BEFORE onSave so refresh sees the updated rule
+    if (isEdit && task?.id && showEditRecurrence && task.recurrenceRuleId) {
+      bridge.updateRecurrenceRule({
+        ruleId:     task.recurrenceRuleId,
+        type:       editRec.type,
+        daysOfWeek: editRec.days.join(','),
+        endDate:    editRec.endDate,
+        mode:       editRec.mode,
+      })
+    }
+
+    onSave(payload)  // includes categoryIds + tagIds — updateTask handles both; triggers refresh
     onClose()
   }
 
@@ -164,7 +165,7 @@ export default function TaskDialog({ task, categories, goals, projects, onSave, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      style={{ background: 'rgba(0,0,0,0.7)' }}>
       <div className="w-full max-w-lg bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07] shrink-0">

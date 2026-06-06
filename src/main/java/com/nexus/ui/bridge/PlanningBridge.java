@@ -227,8 +227,7 @@ public class PlanningBridge {
                     .durationMinutes(minutes)
                     .completed(false)
                     .build();
-                ctx.getPomodoroSessionRepository().save(anon);
-                session = anon;
+                session = ctx.getPomodoroSessionRepository().save(anon);
             }
             return "{\"sessionId\":" + session.getId() + "}";
         } catch (Exception e) { return error(e); }
@@ -316,6 +315,11 @@ public class PlanningBridge {
 
     private String error(Exception e) {
         log.error("Bridge error: {}", e.getMessage(), e);
-        return "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}";
+        try {
+            return json.writeValueAsString(Map.of("error",
+                e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+        } catch (Exception ex) {
+            return "{\"error\":\"unknown error\"}";
+        }
     }
 }

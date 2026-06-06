@@ -20,6 +20,7 @@ public class TaskInput {
     public Boolean important;
     public Long    goalId;              // null=no change; -1=clear link; >0=link to goal
     public List<Long> categoryIds;      // all assigned life areas (multi-category)
+    public List<Long> tagIds;           // tag IDs to set on save (null = no change)
     // Recurrence (only for new recurring tasks)
     public String  recurrenceType;      // "DAILY" | "WEEKDAYS" | "WEEKLY"
     public String  recurrenceDays;      // e.g. "MON,WED,FRI" for WEEKLY

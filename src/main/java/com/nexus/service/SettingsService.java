@@ -74,6 +74,12 @@ public class SettingsService {
         log.debug("Setting saved: {}={}", key, value);
     }
 
+    /** Deletes a setting key entirely (clears any override). */
+    public void delete(String key) {
+        dsl.deleteFrom(TABLE).where(KEY.eq(key)).execute();
+        log.debug("Setting deleted: {}", key);
+    }
+
     /** Returns all settings as an immutable key→value map. */
     public Map<String, String> getAll() {
         Map<String, String> result = new HashMap<>();

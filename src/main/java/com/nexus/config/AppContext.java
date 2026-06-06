@@ -40,6 +40,7 @@ public class AppContext {
     private final PomodoroSessionRepository pomodoroSessionRepository;
     private final GoalRepository            goalRepository;
     private final StreakRepository          streakRepository;
+    private final TransactionRepository     transactionRepository;
 
     // ── Services ──────────────────────────────────────────────────────────────
     private final SettingsService     settingsService;
@@ -56,6 +57,7 @@ public class AppContext {
     private final ExportService       exportService;
     private final ICalExportService   icalExportService;
     private final BackupService       backupService;
+    private final TransactionService  transactionService;
 
     // ── Private constructor ───────────────────────────────────────────────────
     private AppContext() {
@@ -79,6 +81,7 @@ public class AppContext {
         this.pomodoroSessionRepository = new PomodoroSessionRepository(dsl);
         this.goalRepository            = new GoalRepository(dsl);
         this.streakRepository          = new StreakRepository(dsl);
+        this.transactionRepository     = new TransactionRepository(dsl);
 
         // 3. Services (order matters — GoalService must precede TaskService)
         this.notificationService = new NotificationService(notificationRepository);
@@ -98,6 +101,7 @@ public class AppContext {
                                                      tagRepository, goalRepository);
         this.icalExportService   = new ICalExportService(taskRepository, recurrenceRuleRepository);
         this.backupService       = new BackupService(exportService, settingsService);
+        this.transactionService  = new TransactionService(transactionRepository);
 
         // 4. Generate recurring task instances for the next 14 days
         try {
@@ -105,6 +109,15 @@ public class AppContext {
             log.info("Startup recurrence generation: {} new instance(s)", generated);
         } catch (Exception e) {
             log.warn("Recurrence generation failed (non-fatal): {}", e.getMessage());
+        }
+
+        // 4b. Auto-archive past-due recurring instances that were never completed.
+        //     Recurring tasks that passed without action should not pile up in the list.
+        try {
+            int archived = recurrenceService.archivePastDueInstances();
+            if (archived > 0) log.info("Auto-archived {} past-due recurring instance(s)", archived);
+        } catch (Exception e) {
+            log.warn("Past-due recurring cleanup failed (non-fatal): {}", e.getMessage());
         }
 
         // 5. Expire stale streaks (reset current streak if not completed yesterday)
@@ -156,6 +169,8 @@ public class AppContext {
     public TaskRepository             getTaskRepository()             { return taskRepository; }
     public PomodoroSessionRepository  getPomodoroSessionRepository()  { return pomodoroSessionRepository; }
     public DSLContext                 getDsl()                        { return dsl; }
+    public TransactionService        getTransactionService()         { return transactionService; }
+    public TransactionRepository     getTransactionRepository()      { return transactionRepository; }
 
     public void shutdown() {
         log.info("Shutting down application context...");

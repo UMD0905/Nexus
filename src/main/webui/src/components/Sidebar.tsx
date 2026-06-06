@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { LayoutDashboard, CheckSquare, CalendarDays, CalendarRange, CalendarCheck, Target, Grid2X2, Timer, Archive, Plus, Circle, Settings, GripVertical, Inbox, Layers, Clock, CalendarClock, Kanban, ClipboardList, Pencil, Trash2, MoreHorizontal, FolderKanban, Flame } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, CalendarDays, CalendarRange, CalendarCheck, Target, Grid2X2, Timer, Archive, Plus, Circle, Settings, GripVertical, Inbox, Layers, Clock, CalendarClock, Kanban, ClipboardList, Pencil, Trash2, MoreHorizontal, FolderKanban, Flame, Wallet } from 'lucide-react'
 import type { Category, Project, NavSection } from '../types'
 import * as bridge from '../bridge'
 import {
@@ -49,6 +49,7 @@ const NAV_PLAN = [
 ] as const
 
 const NAV_UTIL = [
+  { id: 'finance',  label: 'Finance',   Icon: Wallet },
   { id: 'archive',  label: 'Archive',   Icon: Archive },
   { id: 'settings', label: 'Settings',  Icon: Settings },
 ] as const

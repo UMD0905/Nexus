@@ -42,8 +42,17 @@ public class TaskBridge {
             TaskFilter filter = parseFilter(filterJson);
             filter.setShowArchived(false);
             List<Task> tasks = ctx.getTaskService().getTasks(filter);
-            return toJson(tasks.stream().map(t -> BridgeDtos.taskDto(ctx, t)).toList());
-        } catch (Exception e) {
+            log.debug("getTasks: {} tasks loaded", tasks.size());
+            java.util.List<java.util.Map<String, Object>> dtos = new java.util.ArrayList<>();
+            for (Task t : tasks) {
+                try {
+                    dtos.add(BridgeDtos.taskDto(ctx, t));
+                } catch (Throwable e) {
+                    log.error("taskDto failed for task id={} title='{}': {}", t.getId(), t.getTitle(), e.getMessage(), e);
+                }
+            }
+            return toJson(dtos);
+        } catch (Throwable e) {
             return error(e);
         }
     }
@@ -165,6 +174,13 @@ public class TaskBridge {
                     }
                 }
 
+                if (input.tagIds != null) {
+                    ctx.getTagRepository().removeAllTagsFromTask(saved.getId());
+                    for (Long tagId : input.tagIds) {
+                        ctx.getTagRepository().addTagToTask(saved.getId(), tagId);
+                    }
+                }
+
                 // Propagate title/time changes to future recurring instances
                 if (existing.getRecurrenceRuleId() != null) {
                     ctx.getRecurrenceService().propagateRuleChange(existing.getRecurrenceRuleId());
@@ -195,8 +211,12 @@ public class TaskBridge {
     }
 
     public String markDone(int id) {
-        try { return toJson(BridgeDtos.taskDto(ctx, ctx.getTaskService().markDone(id))); }
-        catch (Exception e) { return error(e); }
+        try {
+            log.info("markDone called: id={}", id);
+            Task done = ctx.getTaskService().markDone(id);
+            log.info("markDone succeeded: id={} status={}", done.getId(), done.getStatus());
+            return toJson(BridgeDtos.taskDto(ctx, done));
+        } catch (Throwable e) { return error(e); }
     }
 
     public void markInProgress(int id) {
@@ -336,12 +356,20 @@ public class TaskBridge {
 
     private String toJson(Object o) {
         try { return json.writeValueAsString(o); }
-        catch (Exception e) { return "{\"error\":\"serialisation failed\"}"; }
+        catch (Exception e) {
+            log.error("toJson serialisation failed: {}", e.getMessage(), e);
+            return "{\"error\":\"serialisation failed\"}";
+        }
     }
 
-    private String error(Exception e) {
+    private String error(Throwable e) {
         log.error("Bridge error: {}", e.getMessage(), e);
-        return "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}";
+        try {
+            return json.writeValueAsString(Map.of("error",
+                e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+        } catch (Exception ex) {
+            return "{\"error\":\"unknown error\"}";
+        }
     }
 
     private TaskFilter parseFilter(String filterJson) throws Exception {

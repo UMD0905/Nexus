@@ -24,6 +24,7 @@ const Anytime    = lazy(() => import('./views/Anytime'))
 const Review     = lazy(() => import('./views/Review'))
 const Kanban     = lazy(() => import('./views/Kanban'))
 const Streaks    = lazy(() => import('./views/Streaks'))
+const Finance    = lazy(() => import('./views/Finance'))
 
 interface AppData {
   tasks: Task[]
@@ -33,6 +34,7 @@ interface AppData {
   projects: Project[]
   timeBlocks: TimeBlock[]
   notifications: Notification[]
+  finance: import('./bridge').FinanceTx[]
 }
 
 const COLOR_PRESETS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#a78bfa', '#f472b6', '#34d399']
@@ -48,7 +50,7 @@ function CategoryDialog({ initial, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      style={{ background: 'rgba(0,0,0,0.7)' }}>
       <div className="w-80 bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in p-6">
         <h2 className="text-sm font-bold text-fg mb-4">{initial ? 'Edit Life Area' : 'New Life Area'}</h2>
         <input className="input mb-3" placeholder="Name (e.g. Health, Career…)" value={name}
@@ -92,7 +94,7 @@ function ProjectDialog({ initial, categories, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      style={{ background: 'rgba(0,0,0,0.7)' }}>
       <div className="w-96 bg-surface rounded-2xl border border-white/[0.09] shadow-[0_24px_64px_rgba(0,0,0,0.6)] animate-fade-in p-6 space-y-3">
         <h2 className="text-sm font-bold text-fg">{initial?.id ? 'Edit Project' : 'New Project'}</h2>
         <input className="input" placeholder="Project name *" value={name}
@@ -188,7 +190,7 @@ export default function App() {
 
   const [data, setData] = useState<AppData>({
     tasks: [], archivedTasks: [], categories: [], goals: [],
-    projects: [], timeBlocks: [], notifications: [],
+    projects: [], timeBlocks: [], notifications: [], finance: [],
   })
 
   const refresh = useCallback(() => {
@@ -200,21 +202,50 @@ export default function App() {
       projects:      bridge.getProjects(),
       timeBlocks:    bridge.getTimeBlocks(),
       notifications: bridge.getNotifications(),
+      finance:       bridge.getTransactions(),
     })
   }, [])
 
-  useEffect(() => { refresh() }, [refresh])
+  // Bridge polling — works for both initial load and page reload.
+  // Fast-polls (150 ms) until ALL critical sub-bridges are present, then calls
+  // refresh() once.  Slow-polls (2 s) afterwards to detect bridge disappearing
+  // after a page reload; reverts to fast-poll until it reappears.
+  useEffect(() => {
+    let cancelled = false
+    let timer: number
+    let bridgePresent = false  // tracks last known bridge state
 
-  // Bridge events — fired from Java (scene-level key filter + tray)
-  // Ctrl+N, Ctrl+K, Ctrl+D are all intercepted in NexusApp.java and arrive here
-  // as pushEvent calls, so they work regardless of WebKit focus state.
+    function poll() {
+      if (cancelled) return
+      const available = !!(window.nexusBridgeTasks && window.nexusBridgePlanning && window.nexusBridgeWin)
+      if (available) {
+        if (!bridgePresent) {
+          bridgePresent = true
+          refresh()            // data load only on bridge appearance (initial or after reload)
+        }
+        timer = window.setTimeout(poll, 2000)   // slow-poll — just watch for disappearance
+      } else {
+        bridgePresent = false
+        timer = window.setTimeout(poll, 150)    // fast-poll — bridge absent, keep trying
+      }
+    }
+
+    poll()
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [refresh])
+
+  // Bridge events — fired from Java (scene-level hotkeys, system tray, reminders).
+  // Uses [] deps so the handler is registered exactly once per page load and always
+  // closes over the stable `refresh` reference (useCallback with [] deps never changes).
   useEffect(() => {
     (window as Window).onBridgeEvent = (eventJson: string) => {
       try {
         const evt = JSON.parse(eventJson)
+        if (evt.type === 'DATA_READY')     refresh()
         if (evt.type === 'QUICK_ADD_OPEN') setShowQuickAdd(true)
         if (evt.type === 'SEARCH_OPEN')    setShowSearch(true)
         if (evt.type === 'MARK_DONE')      window.dispatchEvent(new CustomEvent('nexus:mark-done'))
+        if (evt.type === 'NOTIFICATION')   refresh()
       } catch { /* ignore malformed events */ }
     }
   }, [])
@@ -323,6 +354,8 @@ export default function App() {
         return <Review tasks={data.tasks} archivedTasks={data.archivedTasks} goals={data.goals} onRefresh={refresh} />
       case 'kanban':
         return <Kanban tasks={data.tasks} categories={data.categories} goals={data.goals} onRefresh={refresh} />
+      case 'finance':
+        return <Finance transactions={data.finance} onRefresh={refresh} />
       case 'archive':
         return (
           <TaskList
@@ -362,7 +395,7 @@ export default function App() {
         />
 
         <main className="flex-1 overflow-hidden relative">
-          <div className="absolute inset-0 animate-fade-in" key={navKey}>
+          <div className="absolute inset-0" key={navKey}>
             <Suspense fallback={<div className="h-full bg-canvas" />}>
               {renderView()}
             </Suspense>

@@ -152,7 +152,7 @@ export type NavSection =
   | 'dashboard' | 'all-tasks' | 'today' | 'week'
   | 'goals' | 'matrix' | 'pomodoro' | 'archive' | 'calendar' | 'settings'
   | 'inbox' | 'anytime' | 'someday' | 'scheduled' | 'projects' | 'review' | 'kanban'
-  | 'streaks'
+  | 'streaks' | 'finance'
   | { type: 'category'; category: Category }
   | { type: 'project'; project: Project }
 
